@@ -1,0 +1,310 @@
+name: CI
+
+"on":
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI: true
+
+jobs:
+  # =======================
+  # API TESTS (CYPRESS)
+  # =======================
+
+  api_tests:
+    name: API Tests (Cypress)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            api-tests/package-lock.json
+            api-tests/package.json
+
+      - name: Show Node & npm versions
+        run: |
+          node -v
+          npm -v
+
+      - name: Install dependencies
+        working-directory: api-tests
+        run: npm install
+
+      - name: Run Cypress tests
+        working-directory: api-tests
+        env:
+          CI: true
+        run: npx cypress run
+
+      - name: List report files
+        if: always()
+        working-directory: api-tests
+        run: |
+          echo "::group::Tree reports dir"
+          mkdir -p cypress/reports
+          ls -la cypress/reports || true
+          echo "::endgroup::"
+          echo "::group::Tree screenshots dir"
+          ls -la cypress/screenshots || true
+          echo "::endgroup::"
+
+      - name: Generate Mochawesome report (direct npx, with fallbacks)
+        if: always()
+        working-directory: api-tests
+        run: |
+          set -e
+          mkdir -p cypress/reports/html
+          if compgen -G "cypress/reports/.jsons/*.json" > /dev/null; then
+            echo "Merging from cypress/reports/.jsons/*.json"
+            npx mochawesome-merge cypress/reports/.jsons/*.json > cypress/reports/report.json
+          elif compgen -G "cypress/reports/*.json" > /dev/null; then
+            echo "Merging from cypress/reports/*.json"
+            npx mochawesome-merge cypress/reports/*.json > cypress/reports/report.json
+          else
+            echo "No mochawesome JSONs found. Skipping HTML generation."
+            exit 0
+          fi
+          npx marge cypress/reports/report.json --reportDir cypress/reports/html --inline
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-tests-report-html
+          path: api-tests/cypress/reports/html
+          if-no-files-found: ignore
+
+      - name: Upload raw results (jsons + screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-raw
+          path: |
+            api-tests/cypress/reports/.jsons
+            api-tests/cypress/reports/*.json
+            api-tests/cypress/screenshots
+          if-no-files-found: ignore
+
+  # =======================
+  # E2E TESTS (CYPRESS + CUCUMBER)
+  # =======================
+  e2e:
+    name: Run Cypress E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e-tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: e2e-tests/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cypress run (Chrome headless)
+        uses: cypress-io/github-action@v6
+        with:
+          working-directory: e2e-tests
+          browser: chrome
+          headed: true
+          spec: cypress/e2e/features/**/*.feature
+        env:
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+
+      - name: List reports & screenshots
+        if: always()
+        run: |
+          ls -la cypress/reports || true
+          ls -la cypress/screenshots || true
+
+      - name: Upload artifacts (reports & screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-e2e-reports
+          path: |
+            e2e-tests/cypress/reports/**
+            e2e-tests/cypress/screenshots/**
+          retention-days: 7
+
+
+
+  # =======================
+  # MOBILE TESTS (APPIUM + ANDROID EMULATOR)
+  # =======================
+  mobile_tests:
+    name: Mobile CI (Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+      ADB_INSTALL_TIMEOUT: '20'
+      ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          # Se o package.json estiver em mobile-tests, isso ajuda o cache:
+          cache-dependency-path: |
+            package-lock.json
+            mobile-tests/package-lock.json
+
+      - name: Run mobile tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            adb shell 'for i in $(seq 1 60); do cmd -l | grep -q "settings" && exit 0; sleep 1; done' || true
+
+            if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
+            if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
+            if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run test:all || npm --prefix mobile-tests run test:e2e || npm --prefix mobile-tests test; else npm run test:all || npm run test:e2e || npm test; fi
+            if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
+
+            # não abra o Allure no CI
+            if [ -z "$CI" ]; then if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:open || true; else npm run report:open || true; fi; fi
+
+            # logs (completo + filtrado do app)
+            adb logcat -d > logcat.txt || true
+            adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
+
+            # copiar artefatos para o workspace (sem usar variáveis entre linhas)
+            mkdir -p "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
+            for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true; [ -e "$p" ] && cp -R "$p" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true; done
+            touch "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts/_keep.txt"
+            ls -la "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts" || true
+
+
+
+      - name: Upload mobile artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-artifacts
+          path: ci-mobile-artifacts/**
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload Allure HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-html
+          path: |
+            mobile-tests/reports/allure/html/**
+            reports/allure/html/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # =======================
+  # LOAD TESTS (K6)
+  # =======================
+
+  k6_load_test:
+    name: Load Test (K6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        # (se você usa checkout com path custom, ajuste os 'working-directory' abaixo)
+        uses: actions/checkout@v4
+
+      # Debug: mostra conteúdo na raiz do repo e na pasta do K6
+      - name: (debug) Repo root
+        run: |
+          echo "ROOT=$(pwd)"
+          ls -la
+          ls -la k6-load-tests || true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Instala o k6 nativamente (sem Docker)
+      - name: Install k6 (apt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnupg ca-certificates
+          curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+          k6 version
+
+      # Instala deps do analisador (package.json dentro de k6-load-tests)
+      - name: Install analyzer deps
+        working-directory: k6-load-tests
+        run: npm i
+
+      # Roda k6 exportando o summary diretamente na pasta correta
+      - name: Run K6 (500 VUs / 5m) + export summary
+        working-directory: k6-load-tests
+        env:
+          # Opcional: defina em Settings → Variables como K6_BASE_URL
+          BASE_URL: ${{ vars.K6_BASE_URL }}
+        run: |
+          test -f src/basic_load_test.js || (echo "ERRO: src/basic_load_test.js não existe em $(pwd)"; exit 1)
+          k6 run --summary-export=summary.json src/basic_load_test.js
+          echo "Após k6:"
+          ls -la
+
+      - name: Generate analysis (analysis.md)
+        working-directory: k6-load-tests
+        run: npm run analyze
+
+      - name: Upload K6 artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-report
+          path: |
+            k6-load-tests/summary.html
+            k6-load-tests/summary.json
+            k6-load-tests/summary.txt
+            k6-load-tests/analysis.md
+          retention-days: 7
+

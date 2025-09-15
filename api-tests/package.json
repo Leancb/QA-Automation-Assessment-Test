@@ -1,0 +1,17 @@
+{
+  "name": "api-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "cypress": "^13.13.1",
+    "cypress-mochawesome-reporter": "^3.8.2",
+    "mochawesome": "^7.1.3"
+  },
+  "scripts": {
+    "test": "cypress run",
+    "posttest": "echo 'Reports em cypress/reports'",
+    "test:api": "cypress run --spec \"cypress/e2e/api/**/*.cy.js\"",
+    "report:open": "start \"\" \"cypress/reports/html/index.html\""
+  }
+}

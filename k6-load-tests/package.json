@@ -1,0 +1,17 @@
+{
+  "name": "k6-load-tests",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "analyze": "node tools/analyze.js"
+  },
+  "license": "MIT",
+  "description": "Este projeto atende aos requisitos: - **Tarefa 1**: Teste de carga básico com **500 usuários simultâneos** (VUs) por **5 minutos** usando K6. - **Tarefa 2**: Geração de **relatório HTML** e **JSON** automaticamente e **análise** via script Node.",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "dependencies": {
+    "k6": "^0.0.0"
+  }
+}

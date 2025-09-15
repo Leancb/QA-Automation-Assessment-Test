@@ -1,0 +1,6 @@
+{
+  "nonGlobalStepDefinitions": false,
+  "stepDefinitions": [
+    "cypress/e2e/step_definitions/**/*.{js,jsx,mjs,ts,tsx}"
+  ]
+}

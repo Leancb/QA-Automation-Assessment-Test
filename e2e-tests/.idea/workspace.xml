@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="BuildServerSettings">
+    <option name="LOGIN" value="" />
+    <option name="SERVER_URL" value="http://buildserver" />
+    <option name="REMEMBER_ME" value="true" />
+    <option name="USE_IDEA_PROXY_SETTINGS" value="true" />
+    <option name="INSPECTIONS_BUILD_TYPE_IDS" />
+    <option name="DUPLICATES_BUILD_TYPE_IDS" />
+    <option name="COVERAGE_SETTINGS" />
+    <option name="TEST_STATUS_ENABLED" value="true" />
+    <option name="TEST_STATUS_SHOW_SUCCESSFUL" value="false" />
+    <option name="POSTPONE_SUITABLE_CONFIGURATIONS_SEARCH" value="false" />
+    <option name="ARTIFACTS_BUILD_TYPE_IDS" />
+    <option name="PERFORM_COMMIT_IF_SUCCESSFUL" value="true" />
+    <option name="PERFORM_COMMIT_IF_NO_NEW_FAILED_TESTS" value="false" />
+    <option name="REQUEST_CONFIRMATON" value="false" />
+    <option name="PRE_TESTED_COMMIT" value="true" />
+    <option name="FILTER_BY_STATUS" value="false" />
+    <option name="FILTER_MARKED_AS_FIXED" value="false" />
+    <option name="SHOW_CLOSE_PROMPT" value="true" />
+    <option name="TOOL_WINDOW_SELECTED_CONTENT_INDEX" value="0" />
+    <option name="FILTER_BY_CURRENT_PROJECT" value="true" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="0de0d2ee-b0f3-4623-974c-bdd3f30ae891" name="Default Changelist" comment="">
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/e2e/features/tarefa1.login-formulario.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/e2e/features/tarefa2.checkout.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/e2e/steps/checkout.pt.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/e2e/steps/inventario.pt.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/e2e/steps/login.pt.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/fixtures/usuarios.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/commands.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/e2e.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/page-objects/BasePage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/page-objects/CarrinhoPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/page-objects/CheckoutPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/page-objects/InventarioPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/page-objects/LoginPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/cypress/support/page-objects/ProdutoPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/features/checkout.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/features/checkout.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/features/inventory.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/features/inventory.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/features/login.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/features/login.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../api-tests/tsconfig.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../e2e-tests.zip" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/$PRODUCT_WORKSPACE_FILE$" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/Project.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/dbnavigator.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/e2e-tests.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress.config.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/features/checkout.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/features/checkout.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/features/inventory.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/features/inventory.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/features/login.pt.feature" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/steps/checkout.pt.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/steps/checkout.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/steps/inventory.pt.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/steps/inventory.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/steps/login.pt.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/e2e/steps/login.steps.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/fixtures/users.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/commands.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/e2e.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/page-objects/BasePage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/page-objects/CartPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/page-objects/CheckoutPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/page-objects/InventoryPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/page-objects/LoginPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cypress/support/page-objects/ProductPage.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tsconfig.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api-tests/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../api-tests/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api-tests/cypress.config.js" beforeDir="false" afterPath="$PROJECT_DIR$/../api-tests/cypress.config.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../api-tests/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/../api-tests/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress.config.cjs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/1-getting-started/todo.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/actions.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/aliasing.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/assertions.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/connectors.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/cookies.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/cypress_api.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/files.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/location.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/misc.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/navigation.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/network_requests.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/querying.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/spies_stubs_clocks.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/storage.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/traversal.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/utilities.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/viewport.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/waiting.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/2-advanced-examples/window.cy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/features/carrinho.feature" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/features/carrinho/carrinho.steps.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/features/login.feature" beforeDir="false" afterPath="$PROJECT_DIR$/cypress/e2e/features/login.feature" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/e2e/features/login/login.steps.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/pages/CheckoutPage.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/pages/InventoryPage.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/pages/LoginPage.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cypress/support/e2e.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
+    </list>
+    <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CodeStyleSettingsInfer">
+    <option name="done" value="true" />
+  </component>
+  <component name="DefaultGradleProjectSettings">
+    <option name="isMigrated" value="true" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="ProjectCodeStyleSettingsMigration">
+    <option name="version" value="1" />
+  </component>
+  <component name="ProjectConfigurationFiles">
+    <option name="files">
+      <list>
+        <option value="$PROJECT_DIR$/.idea/e2e-tests.iml" />
+        <option value="$PROJECT_DIR$/.idea/vcs.xml" />
+        <option value="$PROJECT_DIR$/.idea/dbnavigator.xml" />
+        <option value="$PROJECT_DIR$/.idea/modules.xml" />
+        <option value="$PROJECT_DIR$/.idea/codeStyles/Project.xml" />
+        <option value="$PROJECT_DIR$/.idea/codeStyles/codeStyleConfig.xml" />
+      </list>
+    </option>
+  </component>
+  <component name="ProjectId" id="31mqCAXRc2zCSOYL4ZXkvN2pime" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="PropertiesComponent">
+    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+  </component>
+  <component name="RunDashboard">
+    <option name="ruleStates">
+      <list>
+        <RuleState>
+          <option name="name" value="ConfigurationTypeDashboardGroupingRule" />
+        </RuleState>
+        <RuleState>
+          <option name="name" value="StatusDashboardGroupingRule" />
+        </RuleState>
+      </list>
+    </option>
+  </component>
+  <component name="SvnConfiguration">
+    <configuration />
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="0de0d2ee-b0f3-4623-974c-bdd3f30ae891" name="Default Changelist" comment="" />
+      <created>1756139465503</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1756139465503</updated>
+    </task>
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

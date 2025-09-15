@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "lib": [
+      "ES2021",
+      "DOM"
+    ],
+    "types": [
+      "cypress",
+      "@badeball/cypress-cucumber-preprocessor"
+    ],
+    "moduleResolution": "Bundler",
+    "module": "ESNext",
+    "strict": true,
+    "baseUrl": "."
+  },
+  "include": [
+    "cypress/**/*"
+  ]
+}

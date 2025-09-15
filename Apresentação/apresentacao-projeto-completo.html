@@ -1,0 +1,102 @@
+
+<!doctype html><html lang="pt-br"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avaliação — Automação de Testes (Projeto Completo)</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0}
+section{padding:48px;min-height:100vh;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center}
+h1,h2{margin:0 0 16px}
+pre{background:#0f172a;color:#e2e8f0;padding:16px;border-radius:12px;overflow:auto}
+ul{line-height:1.6}
+nav{position:fixed;top:12px;right:12px;background:#111827;color:#fff;padding:8px 12px;border-radius:8px;opacity:.85}
+nav a{color:#fff;text-decoration:none;margin:0 6px}
+footer{text-align:center;padding:16px;color:#6b7280}
+.container{max-width:1100px;margin:0 auto}
+section:nth-child(odd){background:#111827;color:#e5e7eb}
+section:nth-child(even){background:#f8fafc;color:#111827}
+</style>
+</head><body>
+<nav><a href="#1">1</a><a href="#2">2</a><a href="#3">3</a><a href="#4">4</a><a href="#5">5</a><a href="#6">6</a><a href="#7">7</a><a href="#8">8</a><a href="#9">9</a><a href="#10">10</a><a href="#11">11</a><a href="#12">12</a><a href="#13">13</a><a href="#14">14</a><a href="#15">15</a><a href="#16">16</a><a href="#17">17</a><a href="#18">18</a><a href="#19">19</a><a href="#20">20</a></nav>
+<section id="1"><div class="container"><h1>Avaliação — Automação de Testes (Projeto Completo)</h1><ul><li>Apresentação • 17/08/2025</li></ul></div></section>
+<section id="2"><div class="container"><h2>Agenda</h2><ul><li>Visão geral do projeto</li><li>Atendimento a cada bloco da avaliação (1–5)</li><li>Evidências e relatórios</li><li>Pipeline CI/CD</li><li>Próximos passos</li></ul></div></section>
+<section id="3"><div class="container"><h2>Objetivos da Avaliação</h2><ul><li>1) Testes de Carga (K6/JMeter)</li><li>2) Testes de API (Rest Assured / Cypress / Playwright)</li><li>3) Testes E2E com Cucumber</li><li>4) Testes Mobile (Appium/WDIO)</li><li>5) Integração e CI/CD (GitHub Actions/GitLab CI)</li></ul></div></section>
+<section id="4"><div class="container"><h2>Arquitetura / Estrutura de Pastas</h2><pre>.
+├── k6-load-tests/            # Performance (K6) — 500 VUs / 5m
+│   ├── basic_load_test.js
+│   ├── summary.html / .json / .txt
+├── api-tests/                # Testes de API (Cypress)
+│   └── cypress/reports/*
+├── e2e-tests/                # E2E com Cucumber (Cypress)
+│   ├── cypress/e2e/features/*
+│   └── cypress/reports/*
+├── mobile-tests/             # Mobile (WebdriverIO + Appium) + Allure
+│   ├── allure-results/*  → gerar
+│   └── allure-report/*   → abrir via servidor
+└── .github/workflows/ci.yml  # Pipeline CI (API, E2E, Mobile, K6)
+</pre></div></section>
+<section id="5"><div class="container"><h2>Ferramentas e Versões (principais)</h2><ul><li>Node.js 20+ (dev tooling)</li><li>K6 (Docker: grafana/k6:latest)</li><li>Cypress + Cucumber (E2E e API)</li><li>WebdriverIO + Appium (Android / UiAutomator2)</li><li>Allure (Mobile) e Mochawesome (Cypress)</li><li>GitHub Actions (ubuntu-latest)</li></ul></div></section>
+<section id="6"><div class="container"><h2>1) Testes de Carga — Objetivo & Tarefas</h2><ul><li>Objetivo: avaliar experiência com K6/JMeter</li><li>Tarefa: K6 com 500 VUs por 5 minutos contra API pública</li><li>Avaliação: qualidade do script, métricas e gargalos</li><li>Relatório e análise dos resultados</li></ul></div></section>
+<section id="7"><div class="container"><h2>1) K6 — Implementação</h2><pre>import http from 'k6/http';
+import { check, sleep } from 'k6';
+export const options = { vus: 500, duration: '5m',
+  thresholds: { http_req_failed: ['rate<0.01'], http_req_duration: ['p(95)<800'], checks: ['rate>0.99'] } };
+export default function () {
+  const res = http.get('https://reqres.in/api/users?page=2');
+  check(res, { 'status 200': r => r.status === 200 });
+  sleep(0.3);
+}
+</pre></div></section>
+<section id="8"><div class="container"><h2>1) K6 — Resultados (amostra)</h2><ul><li>Requisições: 32724</li><li>p95: 16232.00076499999 ms | média: 3844.4128375198516 ms</li><li>Falhas: 3.00% | Checks OK: 97.07%</li><li>VUs máx: 500</li></ul></div></section>
+<section id="9"><div class="container"><h2>1) K6 — Evidências</h2><ul><li>summary.html (visual), summary.json (dados), summary.txt (texto)</li><li>Abrir HTML via servidor local (http-server / python -m http.server)</li><li>Análise detalhada em analysis.md</li></ul></div></section>
+<section id="10"><div class="container"><h2>2) Testes de API — Objetivo & Tarefas</h2><ul><li>Validar endpoints de uma API exemplo (status, headers, body)</li><li>Cobrir métodos GET/POST/PUT/DELETE (positivos/negativos)</li><li>Gerar e apresentar relatório</li></ul></div></section>
+<section id="11"><div class="container"><h2>2) API — Implementação (Cypress)</h2><pre>// Cypress - teste de API (exemplo)
+it('GET /users retorna 200 e schema esperado', () => {
+  cy.request('/api/users?page=2').then(res => {
+    expect(res.status).to.eq(200);
+    expect(res.headers).to.have.property('content-type').and.include('application/json');
+    expect(res.body.data).to.be.an('array').and.not.be.empty;
+  });
+});
+</pre></div></section>
+<section id="12"><div class="container"><h2>2) API — Evidências</h2><ul><li>Relatórios Mochawesome em api-tests/cypress/reports/**</li><li>Execução headless no CI + upload de artefatos</li><li>Cenários positivos e negativos documentados</li></ul></div></section>
+<section id="13"><div class="container"><h2>3) E2E com Cucumber — Objetivo & Tarefas</h2><ul><li>Login e navegação até página alvo (assertivas de sucesso)</li><li>Fluxo de checkout simples (adicionar ao carrinho → pagar → finalizar)</li><li>Boas práticas: Page Object Pattern, estabilidade e tempo de execução</li><li>Relatório detalhado dos testes E2E</li></ul></div></section>
+<section id="14"><div class="container"><h2>3) E2E — Implementação</h2><pre>// Cucumber + Cypress (Gherkin)
+Feature: Login
+  Scenario: Usuário válido acessa a área logada
+    Given que estou na página de login
+    When informo usuário e senha válidos
+    And clico em "Login"
+    Then vejo a página inicial autenticada
+</pre></div></section>
+<section id="15"><div class="container"><h2>3) E2E — Evidências</h2><ul><li>Features e steps em e2e-tests/cypress/e2e/features/**</li><li>Relatórios Mochawesome em e2e-tests/cypress/reports/**</li><li>Page Objects e comandos customizados para reuso</li></ul></div></section>
+<section id="16"><div class="container"><h2>4) Testes Mobile — Objetivo & Tarefas</h2><ul><li>Login, navegação por telas e validação de elemento</li><li>Cenário de formulário e envio de dados</li><li>Avaliação: locators nativos, clareza e estabilidade</li><li>Relatório detalhado dos testes móveis</li></ul></div></section>
+<section id="17"><div class="container"><h2>4) Mobile — Implementação (WDIO + Appium)</h2><pre>// WebdriverIO + Appium - login (Android)
+it('login', async () => {
+  await $('#username').setValue('standard_user');
+  await $('#password').setValue('secret_sauce');
+  await $('~login-button').click();
+  await expect($('~home-title')).toBeDisplayed();
+});
+</pre></div></section>
+<section id="18"><div class="container"><h2>4) Mobile — Evidências</h2><ul><li>Allure Results: mobile-tests/allure-results/**</li><li>Allure Report: mobile-tests/allure-report/index.html</li><li>Abrir via: npx allure open ./allure-report</li></ul></div></section>
+<section id="19"><div class="container"><h2>5) Integração e CI/CD — Objetivo & Tarefas</h2><ul><li>Pipeline que executa API, E2E e Mobile a cada commit</li><li>Clareza de configuração e uso eficiente de CI</li><li>Relatórios detalhados das execuções no pipeline</li></ul></div></section>
+<section id="20"><div class="container"><h2>5) CI/CD — Pipeline (GitHub Actions)</h2><ul><li>Disparo: push/pull_request/workflow_dispatch</li><li>Jobs paralelos: API, E2E, Mobile, K6</li><li>Cache de dependências (Node)</li><li>Upload de artefatos (reports HTML/JSON/TXT/Allure)</li><li>Fail-fast por thresholds (K6) e testes quebrados</li></ul></div></section>
+<section id="21"><div class="container"><h2>Publicação & README (Requisitos)</h2><ul><li>Projeto publicado em GitHub/GitLab</li><li>README com: nome/descrição, estrutura, versões, dependências, execução e geração de relatórios</li><li>Links/caminhos para evidências de teste (reports)</li></ul></div></section>
+<section id="22"><div class="container"><h2>Comandos Rápidos (Resumo)</h2><pre># K6
+cd k6-load-tests && k6 run basic_load_test.js
+# Relatórios: summary.html / .json / .txt  (abra via http://localhost:8080)
+
+# API (Cypress)
+cd api-tests && npm ci && npx cypress run
+# Relatório: api-tests/cypress/reports/**
+
+# E2E (Cypress + Cucumber)
+cd e2e-tests && npm ci && npx cypress run --config-file cypress.config.cjs
+# Relatório: e2e-tests/cypress/reports/**
+
+# Mobile (WDIO + Appium)
+cd mobile-tests && npm ci && npx wdio run wdio.conf.ts
+# Allure: npx allure generate --clean --output allure-report allure-results
+# Abrir: npx allure open ./allure-report
+</pre></div></section>
+<section id="23"><div class="container"><h2>Conclusões & Próximos Passos</h2><ul><li>Requisitos atendidos em todas as frentes (1–5)</li><li>Próximos: ampliar cenários, dados sintéticos, thresholds por SLO, histórico de execuções no CI</li><li>Opcional: publicar relatórios (Allure/Mochawesome/K6) via GitHub Pages</li></ul></div></section><footer>Gerado automaticamente • Imprima em PDF (Ctrl+P) se preferir.</footer></body></html>

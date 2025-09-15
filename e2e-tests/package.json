@@ -1,0 +1,19 @@
+{
+  "name": "we-do-it-e2e-js",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "clean:reports": "rimraf cypress/reports",
+    "test": "cypress run",
+    "test:headed": "cypress run --headed --browser chrome",
+    "open": "cypress open"
+  },
+  "devDependencies": {
+    "@badeball/cypress-cucumber-preprocessor": "^21.0.2",
+    "@bahmutov/cypress-esbuild-preprocessor": "^2.2.0",
+    "cypress": "^13.17.0",
+    "cypress-mochawesome-reporter": "^3.8.2",
+    "rimraf": "^6.0.1"
+  }
+}
