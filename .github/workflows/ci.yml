@@ -169,7 +169,9 @@ jobs:
       ADB_INSTALL_TIMEOUT: '20'
       ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
       ANDROID_UDID: emulator-5554
+      # Se tiver APK no repo, o script autodetecta:
       # ANDROID_APP_APK: mobile-tests/apps/app-debug.apk
+      # Ou informe package/activity:
       # ANDROID_APP_PACKAGE: com.seu.app
       # ANDROID_APP_ACTIVITY: .MainActivity
 
@@ -192,23 +194,13 @@ jobs:
             package-lock.json
             mobile-tests/package-lock.json
 
-      - name: Ensure Android SDK components (aapt/aapt2)
-        run: |
-          set -e
-          yes | sudo ${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          ${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager \
-            "platform-tools" "platforms;android-33" "build-tools;34.0.0" "emulator" >/dev/null
-          echo "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/platform-tools" >> $GITHUB_PATH
-          echo "${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/emulator" >> $GITHUB_PATH
-
       - name: Init mobile test status file
         run: echo "1" > _mobile_test_status.txt
 
-      # =========== TENTATIVA PRINCIPAL: API 33 ===========
-      - id: emu_api33
-        name: Run mobile tests on Android emulator (API 33)
-        continue-on-error: true
+      # Usamos apenas parâmetros suportados pelo action.
+      - name: Run mobile tests on Android emulator (API 33)
         uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: true
         with:
           api-level: 33
           target: google_apis
@@ -218,16 +210,14 @@ jobs:
           ram-size: 4096M
           heap-size: 576M
           disk-size: 8G
-          # mais tempo de boot
           emulator-boot-timeout: 1800
-          # sem aceleração de HW no runner do GitHub
           disable-linux-hw-accel: true
-          # força cold boot + wipe (evita snapshots bugados)
-          force-avd-cold-boot: true
+          disable-animations: true
+          # Sem snapshots + wipe para evitar device "offline"
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
+          # Este script roda em /bin/sh — manter POSIX.
           script: |
             set +e
-            set -o pipefail
 
             STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
             LOG_DIR="${GITHUB_WORKSPACE:-$(pwd)}/logs"
@@ -235,106 +225,102 @@ jobs:
             TEST_STATUS=1
             mkdir -p "$LOG_DIR" "$OUT_DIR"
 
-            trap '
-              echo "$TEST_STATUS" > "$STATUS_FILE"
-              echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS"
-            ' EXIT
+            # Garante que o status será gravado sempre
+            trap 'echo "$TEST_STATUS" > "$STATUS_FILE"; echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS"' EXIT
 
-            echo "[DEBUG] Reset ADB"
+            echo "[DEBUG] Reset ADB e lista devices"
             adb kill-server || true
             adb start-server || true
             adb devices || true
 
-            echo "[DEBUG] Verificando state e curando offline..."
-            for i in $(seq 1 20); do
+            echo "[DEBUG] Esperando device ficar em estado 'device' (curando offline se preciso)"
+            i=0
+            while [ $i -lt 60 ]; do
               STATE=$(adb get-state 2>/dev/null | tr -d '\r\n')
-              [ "$STATE" = "device" ] && break
-              echo "[WARN] state=$STATE; adb reconnect ($i/20)"
+              if [ "$STATE" = "device" ]; then
+                break
+              fi
+              echo "[WARN] state=$STATE; tentando adb reconnect ($i/60)"
               adb reconnect offline >/dev/null 2>&1 || true
               sleep 2
+              i=$((i+1))
             done
 
-            echo "[DEBUG] Esperando sys.boot_completed e dev.bootcomplete..."
-            for i in $(seq 1 120); do
+            echo "[DEBUG] Aguardando props de boot"
+            i=0
+            SB=0
+            DB=0
+            while [ $i -lt 180 ]; do
               SB=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
               DB=$(adb shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
-              [ "$SB" = "1" ] && [ "$DB" = "1" ] && break
+              if [ "$SB" = "1" ] && [ "$DB" = "1" ]; then
+                break
+              fi
               sleep 2
+              i=$((i+1))
             done
-            SB=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n'); DB=$(adb shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
-            [ "$SB" = "1" ] && [ "$DB" = "1" ] || { echo "[ERROR] boot props não estabilizaram"; adb devices; exit 1; }
+            if [ "$SB" != "1" ] || [ "$DB" != "1" ]; then
+              echo "[ERROR] boot não estabilizou (sys.boot_completed=$SB, dev.bootcomplete=$DB)"
+              adb devices || true
+              exit 1
+            fi
 
             echo "[DEBUG] Desbloqueando tela"
             adb shell input keyevent 82 || true
 
-            echo "[DEBUG] Desativando animações"
-            for i in $(seq 1 5); do
-              adb shell settings put global window_animation_scale 0 && \
-              adb shell settings put global transition_animation_scale 0 && \
-              adb shell settings put global animator_duration_scale 0 && break
-              echo "[WARN] settings ainda indisponível ($i/5)"; sleep 2
-            done
+            echo "[DEBUG] adb devices (ready):"
+            adb devices || true
 
-            # Auto APK
+            # Auto-descoberta de APK se existir
             if [ -f mobile-tests/apps/app-debug.apk ]; then
-              export ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
+              ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
+              export ANDROID_APP_APK
               echo "[DEBUG] ANDROID_APP_APK=$ANDROID_APP_APK"
             fi
 
-            # aapt/aapt2 para extrair package/activity
-            SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
-            AAPT_BIN="$(ls -1d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -n1)/aapt"
-            AAPT2_BIN="$(ls -1d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -n1)/aapt2"
-            if [ -n "${ANDROID_APP_APK:-}" ] && { [ -z "${ANDROID_APP_PACKAGE:-}" ] || [ -z "${ANDROID_APP_ACTIVITY:-}" ]; }; then
-              if [ -x "$AAPT_BIN" ]; then
-                PKG="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/package: name=/{print $2; exit}')"
-                ACT="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/launchable-activity: name=/{print $2; exit}')"
-              elif [ -x "$AAPT2_BIN" ]; then
-                PKG="$("$AAPT2_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/package: name=/{print $2; exit}')"
-                ACT="$("$AAPT2_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/launchable-activity: name=/{print $2; exit}')"
-              fi
-              if [ -n "${PKG:-}" ] && [ -n "${ACT:-}" ]; then
-                export ANDROID_APP_PACKAGE="$PKG"
-                export ANDROID_APP_ACTIVITY="$ACT"
-                echo "[DEBUG] aapt -> package=$ANDROID_APP_PACKAGE activity=$ANDROID_APP_ACTIVITY"
-              else
-                echo "[WARN] aapt/aapt2 não conseguiu extrair package/activity do APK"
-              fi
-            fi
-
-            # Fallback p/ garantir sessão com Settings
+            # Se nada foi informado, usa Settings para garantir sessão
             if [ -z "${ANDROID_APP_APK:-}" ] && [ -z "${ANDROID_APP_PACKAGE:-}" ] && [ -z "${ANDROID_APP_ACTIVITY:-}" ]; then
-              export ANDROID_APP_PACKAGE="com.android.settings"
-              export ANDROID_APP_ACTIVITY=".Settings"
-              echo "[DEBUG] Fallback => Settings: $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
+              ANDROID_APP_PACKAGE="com.android.settings"
+              ANDROID_APP_ACTIVITY=".Settings"
+              export ANDROID_APP_PACKAGE ANDROID_APP_ACTIVITY
+              echo "[DEBUG] Fallback => $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
             fi
 
-            # Deps
+            # Instala dependências
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
 
-            # Appium + driver
+            # Appium 2 e UiAutomator2
             npx --yes appium@latest --version || true
-            npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install returned $?"
+            npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install retornou $? (ok se já instalado)"
 
-            # Appium server
+            # Sobe Appium
             export WDIO_EXTERNAL_APPIUM=1
             echo "[DEBUG] Starting Appium..."
             nohup npx appium --address 127.0.0.1 --port 4723 --base-path / --relaxed-security > "$LOG_DIR/appium-ci.log" 2>&1 &
-            for i in $(seq 1 60); do
-              curl -sf "http://127.0.0.1:4723/status" >/dev/null && break
+
+            # Espera Appium /status
+            i=0
+            until curl -sf "http://127.0.0.1:4723/status" >/dev/null 2>&1 || [ $i -ge 60 ]; do
               sleep 1
+              i=$((i+1))
             done
-            curl -sf "http://127.0.0.1:4723/status" >/dev/null || { echo "[ERROR] Appium não respondeu"; tail -n 200 "$LOG_DIR/appium-ci.log" || true; exit 1; }
+            if ! curl -sf "http://127.0.0.1:4723/status" >/dev/null 2>&1; then
+              echo "[ERROR] Appium não respondeu em /status"
+              tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
+              exit 1
+            fi
             echo "[DEBUG] Appium UP"
 
-            # Reports clean
+            # Limpa relatórios (se script existir)
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
 
-            echo "[DEBUG] Node versions:"; node -e "console.log(process.versions)"
+            echo "[DEBUG] Node versions:"
+            node -e "console.log(process.versions)"
+
             echo "[DEBUG] ANDROID_UDID=${ANDROID_UDID:-<unset>}"
             adb -s "${ANDROID_UDID:-emulator-5554}" shell getprop ro.build.version.release 2>/dev/null || true
 
-            # ===== Run tests (com fallbacks) =====
+            # ===== Executa testes com fallbacks =====
             if [ -f mobile-tests/package.json ]; then
               npm --prefix mobile-tests run test:all && TEST_STATUS=0 || TEST_STATUS=$?
               if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
@@ -353,10 +339,14 @@ jobs:
             echo "[DEBUG] Tail WDIO logs (root):"; tail -n 200 logs/wdio/*.log 2>/dev/null || true
             echo "[DEBUG] Tail WDIO logs (mobile-tests):"; tail -n 200 mobile-tests/logs/wdio/*.log 2>/dev/null || true
 
+            # Gera relatórios se houver script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
-            adb logcat -d > logcat.txt || true
-            adb logcat -d "*:S" ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
 
+            # Logcat
+            adb logcat -d > logcat.txt 2>/dev/null || true
+            adb logcat -d "*:S" ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt 2>/dev/null || true
+
+            # Junta artefatos
             [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "$OUT_DIR"/ || true
             [ -d "artifacts" ] && cp -R "artifacts" "$OUT_DIR"/ || true
             for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do
@@ -365,30 +355,6 @@ jobs:
             done
             touch "$OUT_DIR/_keep.txt"
             ls -la "$OUT_DIR" || true
-
-      # =========== FALLBACK: API 31, só roda se a API 33 falhar ===========
-      - name: Run mobile tests on Android emulator (API 31 fallback)
-        if: steps.emu_api33.outcome == 'failure'
-        uses: reactivecircus/android-emulator-runner@v2
-        continue-on-error: true
-        with:
-          api-level: 31
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          cores: 2
-          ram-size: 4096M
-          heap-size: 576M
-          disk-size: 8G
-          emulator-boot-timeout: 1800
-          disable-linux-hw-accel: true
-          force-avd-cold-boot: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
-          # Reaproveita exatamente o mesmo script acima
-          script: |
-            # (cole aqui o MESMO script do passo API 33)
-            echo "Reutilize o mesmo script do passo anterior (API 33) aqui."
-            exit 1  # <- lembrete para você substituir pelo script real
 
       - name: Check mobile test status
         run: |
@@ -420,6 +386,7 @@ jobs:
             reports/allure/html/**
           if-no-files-found: ignore
           retention-days: 7
+
 
 
 
