@@ -237,28 +237,79 @@ jobs:
               echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS"
             ' EXIT
 
-            echo "[DEBUG] adb devices:"
+            echo "[DEBUG] Reset ADB"
+            adb kill-server || true
+            adb start-server || true
+
+            echo "[DEBUG] adb devices (pré-wait):"
             adb devices || true
 
-            # Auto APK
+            # --- Espera robusta pelo boot ---
+            echo "[DEBUG] Esperando device aparecer..."
+            adb wait-for-device
+
+            # Às vezes o device entra como "offline"; força reconnect loop curto
+            for i in $(seq 1 20); do
+              STATE=$(adb get-state 2>/dev/null | tr -d '\r\n')
+              [ "$STATE" = "device" ] && break
+              echo "[WARN] state=$STATE; tentando adb reconnect ($i/20)"
+              adb reconnect offline >/dev/null 2>&1 || true
+              sleep 2
+            done
+
+            echo "[DEBUG] aguardando sys.boot_completed..."
+            for i in $(seq 1 120); do
+              BOOTED=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
+              [ "$BOOTED" = "1" ] && break
+              sleep 2
+            done
+            [ "$BOOTED" = "1" ] || { echo "[ERROR] sys.boot_completed não ficou 1"; adb devices; exit 1; }
+
+            echo "[DEBUG] aguardando dev.bootcomplete..."
+            for i in $(seq 1 120); do
+              DBOOT=$(adb shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
+              [ "$DBOOT" = "1" ] && break
+              sleep 2
+            done
+            [ "$DBOOT" = "1" ] || { echo "[ERROR] dev.bootcomplete não ficou 1"; adb devices; exit 1; }
+
+            echo "[DEBUG] Desbloqueando tela"
+            adb shell input keyevent 82 || true
+
+            echo "[DEBUG] Verificando pacote Settings responde..."
+            for i in $(seq 1 30); do
+              adb shell pm list packages 1>/dev/null 2>&1 && break
+              echo "[WARN] pm não respondeu ainda ($i/30)"; sleep 1
+            done
+
+            echo "[DEBUG] Desativando animações (com retries)"
+            for i in $(seq 1 5); do
+              adb shell settings put global window_animation_scale 0 && \
+              adb shell settings put global transition_animation_scale 0 && \
+              adb shell settings put global animator_duration_scale 0 && break
+              echo "[WARN] settings service ainda indisponível ($i/5)"; sleep 2
+            done
+
+            echo "[DEBUG] adb devices (pós-boot):"
+            adb devices || true
+
+            # Auto APK (mesmo comportamento que você já tinha)
             if [ -f mobile-tests/apps/app-debug.apk ]; then
               export ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
               echo "[DEBUG] ANDROID_APP_APK=$ANDROID_APP_APK"
             fi
 
-            # Descobrir aapt/aapt2 mais recente
+            # Extrair package/activity se necessário (aapt ou aapt2)
             SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
             AAPT_BIN="$(ls -1d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -n1)/aapt"
             AAPT2_BIN="$(ls -1d "$SDK"/build-tools/* 2>/dev/null | sort -V | tail -n1)/aapt2"
-
-            # Extrai package/activity se não informados
             if [ -n "${ANDROID_APP_APK:-}" ] && { [ -z "${ANDROID_APP_PACKAGE:-}" ] || [ -z "${ANDROID_APP_ACTIVITY:-}" ]; }; then
               if [ -x "$AAPT_BIN" ]; then
-                PKG="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" "/package: name=/{print \$2; exit}")"
-                ACT="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" "/launchable-activity: name=/{print \$2; exit}")"
+                PKG="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/package: name=/{print $2; exit}')"
+                ACT="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/launchable-activity: name=/{print $2; exit}')"
               elif [ -x "$AAPT2_BIN" ]; then
-                PKG="$("$AAPT2_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" "/package: name=/{print \$2; exit}")"
-                ACT="$("$AAPT2_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" "/launchable-activity: name=/{print \$2; exit}")"
+                PKG="$("$AAPT2_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/package: name=/{print $2; exit}')"
+                ACT="$("$AAPT2_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/launchable-activity: name=/{print $2; exit}')"
               fi
               if [ -n "${PKG:-}" ] && [ -n "${ACT:-}" ]; then
                 export ANDROID_APP_PACKAGE="$PKG"
@@ -269,25 +320,24 @@ jobs:
               fi
             fi
 
-            # Fallback diagnóstico para garantir sessão
+            # Fallback para garantir sessão
             if [ -z "${ANDROID_APP_APK:-}" ] && [ -z "${ANDROID_APP_PACKAGE:-}" ] && [ -z "${ANDROID_APP_ACTIVITY:-}" ]; then
               export ANDROID_APP_PACKAGE="com.android.settings"
               export ANDROID_APP_ACTIVITY=".Settings"
               echo "[DEBUG] Fallback => Settings: $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
             fi
 
-            # Instala dependências
+            # Deps Node
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
 
-            # Appium 2 + driver UiAutomator2
+            # Appium 2 + driver
             npx --yes appium@latest --version || true
             npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install returned $?"
 
-            # Sobe Appium e aguarda /status
+            # Sobe Appium e espera /status
             export WDIO_EXTERNAL_APPIUM=1
             echo "[DEBUG] Starting Appium server..."
             nohup npx appium --address 127.0.0.1 --port 4723 --base-path / --relaxed-security > "$LOG_DIR/appium-ci.log" 2>&1 &
-
             for i in $(seq 1 60); do
               curl -sf "http://127.0.0.1:4723/status" >/dev/null && break
               sleep 1
@@ -299,12 +349,10 @@ jobs:
             fi
             echo "[DEBUG] Appium UP"
 
-            # Limpa relatórios se existir script
+            # Limpa relatórios se houver script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
 
-            echo "[DEBUG] Node versions:"
-            node -e "console.log(process.versions)"
-
+            echo "[DEBUG] Node versions:"; node -e "console.log(process.versions)"
             echo "[DEBUG] ANDROID_UDID=${ANDROID_UDID:-<unset>}"
             adb -s "${ANDROID_UDID:-emulator-5554}" shell getprop ro.build.version.release 2>/dev/null || true
 
@@ -323,22 +371,15 @@ jobs:
               if [ "$TEST_STATUS" -ne 0 ] && [ -f wdio.conf.ts ]; then npx --yes wdio run wdio.conf.ts && TEST_STATUS=0 || TEST_STATUS=$?; fi
             fi
 
-            # ===== Logs rápidos no console =====
-            echo "[DEBUG] Tail Appium log:"
-            tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
-            echo "[DEBUG] Tail WDIO logs (root):"
-            tail -n 200 logs/wdio/*.log 2>/dev/null || true
-            echo "[DEBUG] Tail WDIO logs (mobile-tests):"
-            tail -n 200 mobile-tests/logs/wdio/*.log 2>/dev/null || true
+            echo "[DEBUG] Tail Appium log:"; tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
+            echo "[DEBUG] Tail WDIO logs (root):"; tail -n 200 logs/wdio/*.log 2>/dev/null || true
+            echo "[DEBUG] Tail WDIO logs (mobile-tests):"; tail -n 200 mobile-tests/logs/wdio/*.log 2>/dev/null || true
 
-            # Gera relatórios se existir script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
 
-            # Logcat (completo e filtrado)
             adb logcat -d > logcat.txt || true
             adb logcat -d "*:S" ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
 
-            # Junta artefatos
             [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "$OUT_DIR"/ || true
             [ -d "artifacts" ] && cp -R "artifacts" "$OUT_DIR"/ || true
             for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do
@@ -347,6 +388,7 @@ jobs:
             done
             touch "$OUT_DIR/_keep.txt"
             ls -la "$OUT_DIR" || true
+
 
       - name: Check mobile test status
         run: |
