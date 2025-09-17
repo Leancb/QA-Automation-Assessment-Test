@@ -159,212 +159,212 @@ jobs:
   # =======================
   # MOBILE TESTS (APPIUM + ANDROID EMULATOR)
   # =======================
-  name: Mobile CI
+  mobile_tests:
+    name: Mobile CI
 
-  on:
-    push:
-    pull_request:
-    workflow_dispatch:
+    on:
+      push:
+      pull_request:
+      workflow_dispatch:
 
-  jobs:
-    mobile_tests:
-      name: Mobile CI (Android)
-      runs-on: ubuntu-latest
-      timeout-minutes: 45
+    jobs:
+      mobile_tests:
+        name: Mobile CI (Android)
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
 
-      env:
-        CI: true
-        ADB_INSTALL_TIMEOUT: '20'
-        ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
-        ANDROID_UDID: emulator-5554
-        # Define ONE of these (APK or Package/Activity). If you have an APK in mobile-tests/apps/app-debug.apk, the script autodetects it.
-        # ANDROID_APP_APK: mobile-tests/apps/app-debug.apk
-        # ANDROID_APP_PACKAGE: com.seu.app
-        # ANDROID_APP_ACTIVITY: .MainActivity
+        env:
+          CI: true
+          ADB_INSTALL_TIMEOUT: '20'
+          ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
+          ANDROID_UDID: emulator-5554
+          # Define ONE of these (APK or Package/Activity). If you have an APK in mobile-tests/apps/app-debug.apk, the script autodetects it.
+          # ANDROID_APP_APK: mobile-tests/apps/app-debug.apk
+          # ANDROID_APP_PACKAGE: com.seu.app
+          # ANDROID_APP_ACTIVITY: .MainActivity
 
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
+        steps:
+          - name: Checkout
+            uses: actions/checkout@v4
 
-        - name: Setup Java 17
-          uses: actions/setup-java@v4
-          with:
-            distribution: temurin
-            java-version: '17'
+          - name: Setup Java 17
+            uses: actions/setup-java@v4
+            with:
+              distribution: temurin
+              java-version: '17'
 
-        - name: Setup Node 20
-          uses: actions/setup-node@v4
-          with:
-            node-version: '20'
-            cache: npm
-            cache-dependency-path: |
-              package-lock.json
-              mobile-tests/package-lock.json
+          - name: Setup Node 20
+            uses: actions/setup-node@v4
+            with:
+              node-version: '20'
+              cache: npm
+              cache-dependency-path: |
+                package-lock.json
+                mobile-tests/package-lock.json
 
-        - name: Init mobile test status file
-          run: echo "1" > _mobile_test_status.txt
+          - name: Init mobile test status file
+            run: echo "1" > _mobile_test_status.txt
 
-        - name: Run mobile tests on Android emulator
-          uses: reactivecircus/android-emulator-runner@v2
-          continue-on-error: true
-          with:
-            api-level: 30
-            target: google_apis
-            arch: x86_64
-            profile: pixel_6
-            cores: 2
-            ram-size: 4096M
-            heap-size: 576M
-            disk-size: 8G
-            emulator-boot-timeout: 1200
-            disable-linux-hw-accel: true
-            emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
-            script: |
-              set +e
-              set -o pipefail
+          - name: Run mobile tests on Android emulator
+            uses: reactivecircus/android-emulator-runner@v2
+            continue-on-error: true
+            with:
+              api-level: 30
+              target: google_apis
+              arch: x86_64
+              profile: pixel_6
+              cores: 2
+              ram-size: 4096M
+              heap-size: 576M
+              disk-size: 8G
+              emulator-boot-timeout: 1200
+              disable-linux-hw-accel: true
+              emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
+              script: |
+                set +e
+                set -o pipefail
 
-              STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
-              TEST_STATUS=1
-              trap 'echo "$TEST_STATUS" > "$STATUS_FILE"; echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS";' EXIT
+                STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
+                TEST_STATUS=1
+                trap 'echo "$TEST_STATUS" > "$STATUS_FILE"; echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS";' EXIT
 
-              echo "[DEBUG] adb devices:"
-              adb devices || true
+                echo "[DEBUG] adb devices:"
+                adb devices || true
 
-              # Auto-pick default APK if present
-              if [ -f mobile-tests/apps/app-debug.apk ]; then
-                export ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
-                echo "[DEBUG] ANDROID_APP_APK=$ANDROID_APP_APK"
-              fi
-
-              # Extract package/activity from APK if not provided
-              if [ -n "${ANDROID_APP_APK:-}" ] && { [ -z "${ANDROID_APP_PACKAGE:-}" ] || [ -z "${ANDROID_APP_ACTIVITY:-}" ]; }; then
-                AAPT_BIN="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools/35.0.0/aapt"
-                if [ -x "$AAPT_BIN" ]; then
-                  PKG="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" '/package: name=/{print $2; exit}')"
-                  ACT="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" '/launchable-activity: name=/{print $2; exit}')"
-                  if [ -n "$PKG" ] && [ -n "$ACT" ]; then
-                    export ANDROID_APP_PACKAGE="$PKG"
-                    export ANDROID_APP_ACTIVITY="$ACT"
-                    echo "[DEBUG] aapt -> package=$ANDROID_APP_PACKAGE activity=$ANDROID_APP_ACTIVITY"
-                  else
-                    echo "[WARN] aapt não conseguiu extrair package/activity do APK"
-                  fi
-                else
-                  echo "[WARN] aapt não encontrado em $AAPT_BIN"
+                # Auto-pick default APK if present
+                if [ -f mobile-tests/apps/app-debug.apk ]; then
+                  export ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
+                  echo "[DEBUG] ANDROID_APP_APK=$ANDROID_APP_APK"
                 fi
-              fi
 
-              # Fallback diagnostic app if none provided (ensures session creation)
-              if [ -z "${ANDROID_APP_APK:-}" ] && [ -z "${ANDROID_APP_PACKAGE:-}" ] && [ -z "${ANDROID_APP_ACTIVITY:-}" ]; then
-                export ANDROID_APP_PACKAGE="com.android.settings"
-                export ANDROID_APP_ACTIVITY=".Settings"
-                echo "[DEBUG] Fallback diagnóstico => Settings: $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
-              fi
+                # Extract package/activity from APK if not provided
+                if [ -n "${ANDROID_APP_APK:-}" ] && { [ -z "${ANDROID_APP_PACKAGE:-}" ] || [ -z "${ANDROID_APP_ACTIVITY:-}" ]; }; then
+                  AAPT_BIN="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools/35.0.0/aapt"
+                  if [ -x "$AAPT_BIN" ]; then
+                    PKG="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" '/package: name=/{print $2; exit}')"
+                    ACT="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\\\" '/launchable-activity: name=/{print $2; exit}')"
+                    if [ -n "$PKG" ] && [ -n "$ACT" ]; then
+                      export ANDROID_APP_PACKAGE="$PKG"
+                      export ANDROID_APP_ACTIVITY="$ACT"
+                      echo "[DEBUG] aapt -> package=$ANDROID_APP_PACKAGE activity=$ANDROID_APP_ACTIVITY"
+                    else
+                      echo "[WARN] aapt não conseguiu extrair package/activity do APK"
+                    fi
+                  else
+                    echo "[WARN] aapt não encontrado em $AAPT_BIN"
+                  fi
+                fi
 
-              # Install deps
-              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
+                # Fallback diagnostic app if none provided (ensures session creation)
+                if [ -z "${ANDROID_APP_APK:-}" ] && [ -z "${ANDROID_APP_PACKAGE:-}" ] && [ -z "${ANDROID_APP_ACTIVITY:-}" ]; then
+                  export ANDROID_APP_PACKAGE="com.android.settings"
+                  export ANDROID_APP_ACTIVITY=".Settings"
+                  echo "[DEBUG] Fallback diagnóstico => Settings: $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
+                fi
 
-              # Appium 2 + UiAutomator2 driver
-              npx --yes appium@latest --version || true
-              npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install returned $?"
+                # Install deps
+                if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
 
-              # Start external Appium (CI)
-              export WDIO_EXTERNAL_APPIUM=1
-              LOG_DIR="${GITHUB_WORKSPACE:-$(pwd)}/logs"
-              mkdir -p "$LOG_DIR"
-              echo "[DEBUG] Starting Appium server..."
-              nohup npx appium --address 127.0.0.1 --port 4723 --base-path / --relaxed-security > "$LOG_DIR/appium-ci.log" 2>&1 &
+                # Appium 2 + UiAutomator2 driver
+                npx --yes appium@latest --version || true
+                npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install returned $?"
 
-              # Wait Appium /status
-              for i in $(seq 1 60); do
-                curl -sf "http://127.0.0.1:4723/status" >/dev/null && break
-                sleep 1
-              done
-              if ! curl -sf "http://127.0.0.1:4723/status" >/dev/null; then
-                echo "[ERROR] Appium não respondeu em /status"
+                # Start external Appium (CI)
+                export WDIO_EXTERNAL_APPIUM=1
+                LOG_DIR="${GITHUB_WORKSPACE:-$(pwd)}/logs"
+                mkdir -p "$LOG_DIR"
+                echo "[DEBUG] Starting Appium server..."
+                nohup npx appium --address 127.0.0.1 --port 4723 --base-path / --relaxed-security > "$LOG_DIR/appium-ci.log" 2>&1 &
+
+                # Wait Appium /status
+                for i in $(seq 1 60); do
+                  curl -sf "http://127.0.0.1:4723/status" >/dev/null && break
+                  sleep 1
+                done
+                if ! curl -sf "http://127.0.0.1:4723/status" >/dev/null; then
+                  echo "[ERROR] Appium não respondeu em /status"
+                  tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
+                  exit 1
+                fi
+                echo "[DEBUG] Appium UP"
+
+                # Clean reports if scripts exist
+                if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
+
+                echo "[DEBUG] Node versions:"
+                node -e "console.log(process.versions)"
+
+                echo "[DEBUG] ANDROID_UDID=${ANDROID_UDID:-<unset>}"
+                adb -s "${ANDROID_UDID:-emulator-5554}" shell getprop ro.build.version.release 2>/dev/null || true
+
+                # ===== Run tests with fallbacks =====
+                if [ -f mobile-tests/package.json ]; then
+                  npm --prefix mobile-tests run test:all && TEST_STATUS=0 || TEST_STATUS=$?
+                  if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
+                  if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests test && TEST_STATUS=0 || TEST_STATUS=$?; fi
+                  if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run mobile-tests/wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
+                else
+                  npm run test:all && TEST_STATUS=0 || TEST_STATUS=$?
+                  if [ "$TEST_STATUS" -ne 0 ]; then npm run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
+                  if [ "$TEST_STATUS" -ne 0 ]; then npm test && TEST_STATUS=0 || TEST_STATUS=$?; fi
+                  if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
+                fi
+
+                # ===== Show logs in console (quick diagnostics) =====
+                echo "[DEBUG] Tail Appium log:"
                 tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
+                echo "[DEBUG] Tail WDIO logs (root):"
+                tail -n 200 logs/wdio/*.log 2>/dev/null || true
+                echo "[DEBUG] Tail WDIO logs (mobile-tests):"
+                tail -n 200 mobile-tests/logs/wdio/*.log 2>/dev/null || true
+
+                # Reports and device logs
+                if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
+
+                adb logcat -d > logcat.txt || true
+                adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
+
+                OUT_DIR="${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
+                mkdir -p "$OUT_DIR"
+                [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "$OUT_DIR"/ || true
+                [ -d "artifacts" ] && cp -R "artifacts" "$OUT_DIR"/ || true
+                for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do
+                  [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "$OUT_DIR"/ || true
+                  [ -e "$p" ] && cp -R "$p" "$OUT_DIR"/ || true
+                done
+                touch "$OUT_DIR/_keep.txt"
+                ls -la "$OUT_DIR" || true
+
+          - name: Check mobile test status
+            run: |
+              STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
+              if [ ! -f "$STATUS_FILE" ]; then
+                echo "Arquivo de status não encontrado — presumindo falha."
                 exit 1
               fi
-              echo "[DEBUG] Appium UP"
+              STATUS=$(cat "$STATUS_FILE" | tr -d '\r\n ')
+              echo "WDIO exit code: ${STATUS}"
+              test "$STATUS" = "0"
 
-              # Clean reports if scripts exist
-              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
+          - name: Upload mobile artifacts
+            if: always()
+            uses: actions/upload-artifact@v4
+            with:
+              name: mobile-artifacts
+              path: ci-mobile-artifacts/**
+              if-no-files-found: warn
+              retention-days: 7
 
-              echo "[DEBUG] Node versions:"
-              node -e "console.log(process.versions)"
-
-              echo "[DEBUG] ANDROID_UDID=${ANDROID_UDID:-<unset>}"
-              adb -s "${ANDROID_UDID:-emulator-5554}" shell getprop ro.build.version.release 2>/dev/null || true
-
-              # ===== Run tests with fallbacks =====
-              if [ -f mobile-tests/package.json ]; then
-                npm --prefix mobile-tests run test:all && TEST_STATUS=0 || TEST_STATUS=$?
-                if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
-                if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests test && TEST_STATUS=0 || TEST_STATUS=$?; fi
-                if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run mobile-tests/wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
-              else
-                npm run test:all && TEST_STATUS=0 || TEST_STATUS=$?
-                if [ "$TEST_STATUS" -ne 0 ]; then npm run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
-                if [ "$TEST_STATUS" -ne 0 ]; then npm test && TEST_STATUS=0 || TEST_STATUS=$?; fi
-                if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
-              fi
-
-              # ===== Show logs in console (quick diagnostics) =====
-              echo "[DEBUG] Tail Appium log:"
-              tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
-              echo "[DEBUG] Tail WDIO logs (root):"
-              tail -n 200 logs/wdio/*.log 2>/dev/null || true
-              echo "[DEBUG] Tail WDIO logs (mobile-tests):"
-              tail -n 200 mobile-tests/logs/wdio/*.log 2>/dev/null || true
-
-              # Reports and device logs
-              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
-
-              adb logcat -d > logcat.txt || true
-              adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
-
-              OUT_DIR="${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
-              mkdir -p "$OUT_DIR"
-              [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "$OUT_DIR"/ || true
-              [ -d "artifacts" ] && cp -R "artifacts" "$OUT_DIR"/ || true
-              for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do
-                [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "$OUT_DIR"/ || true
-                [ -e "$p" ] && cp -R "$p" "$OUT_DIR"/ || true
-              done
-              touch "$OUT_DIR/_keep.txt"
-              ls -la "$OUT_DIR" || true
-
-        - name: Check mobile test status
-          run: |
-            STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
-            if [ ! -f "$STATUS_FILE" ]; then
-              echo "Arquivo de status não encontrado — presumindo falha."
-              exit 1
-            fi
-            STATUS=$(cat "$STATUS_FILE" | tr -d '\r\n ')
-            echo "WDIO exit code: ${STATUS}"
-            test "$STATUS" = "0"
-
-        - name: Upload mobile artifacts
-          if: always()
-          uses: actions/upload-artifact@v4
-          with:
-            name: mobile-artifacts
-            path: ci-mobile-artifacts/**
-            if-no-files-found: warn
-            retention-days: 7
-
-        - name: Upload Allure HTML
-          if: always()
-          uses: actions/upload-artifact@v4
-          with:
-            name: allure-html
-            path: |
-              mobile-tests/reports/allure/html/**
-              reports/allure/html/**
-            if-no-files-found: ignore
-            retention-days: 7
-
+          - name: Upload Allure HTML
+            if: always()
+            uses: actions/upload-artifact@v4
+            with:
+              name: allure-html
+              path: |
+                mobile-tests/reports/allure/html/**
+                reports/allure/html/**
+              if-no-files-found: ignore
+              retention-days: 7
 
   # =======================
   # LOAD TESTS (K6)
