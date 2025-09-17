@@ -223,15 +223,37 @@ jobs:
             echo "[DEBUG] adb devices:"
             adb devices || true
 
-            # Se existir um APK padrão no repo, usa automaticamente
+            # 1) Auto-seleção do APK do projeto (se existir)
+            #    Ajuste o caminho se teu APK fica em outro lugar
             if [ -f mobile-tests/apps/app-debug.apk ]; then
               export ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
               echo "[DEBUG] ANDROID_APP_APK=$ANDROID_APP_APK"
             fi
 
-            # Alternativamente, se você preferir Package/Activity, defina via Secrets/Env do workflow:
-            # export ANDROID_APP_PACKAGE="com.seu.app"
-            # export ANDROID_APP_ACTIVITY=".MainActivity"
+            # 2) Se tiver APK mas NÃO vierem package/activity, tenta extrair com aapt
+            if [ -n "${ANDROID_APP_APK:-}" ] && { [ -z "${ANDROID_APP_PACKAGE:-}" ] || [ -z "${ANDROID_APP_ACTIVITY:-}" ]; }; then
+              AAPT_BIN="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}/build-tools/35.0.0/aapt"
+              if [ -x "$AAPT_BIN" ]; then
+                PKG="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/package: name=/{print $2; exit}')"
+                ACT="$("$AAPT_BIN" dump badging "$ANDROID_APP_APK" | awk -F\" '/launchable-activity: name=/{print $2; exit}')"
+                if [ -n "$PKG" ] && [ -n "$ACT" ]; then
+                  export ANDROID_APP_PACKAGE="$PKG"
+                  export ANDROID_APP_ACTIVITY="$ACT"
+                  echo "[DEBUG] aapt -> package=$ANDROID_APP_PACKAGE activity=$ANDROID_APP_ACTIVITY"
+                else
+                  echo "[WARN] aapt não conseguiu extrair package/activity do APK"
+                fi
+              else
+                echo "[WARN] aapt não encontrado em $AAPT_BIN"
+              fi
+            fi
+
+            # 3) Se NÃO houver APK NEM package/activity, usa Settings p/ smoke (diagnóstico de sessão)
+            if [ -z "${ANDROID_APP_APK:-}" ] && [ -z "${ANDROID_APP_PACKAGE:-}" ] && [ -z "${ANDROID_APP_ACTIVITY:-}" ]; then
+              export ANDROID_APP_PACKAGE="com.android.settings"
+              export ANDROID_APP_ACTIVITY=".Settings"
+              echo "[DEBUG] Fallback diagnóstico => Settings: $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
+            fi
 
             # Deps
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
@@ -262,21 +284,23 @@ jobs:
               if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
             fi
 
-            # ===== Logs e artefatos =====
-            # Appium e WDIO escrevem logs/ — vamos exibir um resumo no console para debug imediato
-            echo "[DEBUG] Tail Appium log (se existir):"
+            # ===== Logs no console p/ diagnóstico rápido =====
+            echo "[DEBUG] Tail Appium logs (root):"
             tail -n 200 logs/appium*.log 2>/dev/null || true
-            echo "[DEBUG] Tail WDIO log (se existir):"
-            tail -n 200 logs/wdio/*.log 2>/dev/null || true
+            echo "[DEBUG] Tail Appium logs (mobile-tests):"
+            tail -n 200 mobile-tests/logs/appium*.log 2>/dev/null || true
 
-            # Gerar relatórios se houver script
+            echo "[DEBUG] Tail WDIO logs (root):"
+            tail -n 200 logs/wdio/*.log 2>/dev/null || true
+            echo "[DEBUG] Tail WDIO logs (mobile-tests):"
+            tail -n 200 mobile-tests/logs/wdio/*.log 2>/dev/null || true
+
+            # Relatórios, logs do dispositivo e artefatos
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
 
-            # Logs do dispositivo
             adb logcat -d > logcat.txt || true
             adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
 
-            # Copia artefatos (inclui artifacts/ do afterTest do wdio.conf.js)
             OUT_DIR="${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
             mkdir -p "$OUT_DIR"
             [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "$OUT_DIR"/ || true
@@ -287,6 +311,7 @@ jobs:
             done
             touch "$OUT_DIR/_keep.txt"
             ls -la "$OUT_DIR" || true
+
 
 
       - name: Check mobile test status

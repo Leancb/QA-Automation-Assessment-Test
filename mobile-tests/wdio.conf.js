@@ -53,9 +53,8 @@ exports.config = {
 
   services: [
     ['appium', {
-      // Usa o binário via npx, então não precisa do appium instalado como dep do projeto
-      command: 'npx appium',
-      logPath: path.resolve(__dirname, 'logs'), // appium.log ficará aqui
+      command: 'appium',                     // <- aqui
+      logPath: path.resolve(__dirname, 'logs'),
       args: {
         address: APPIUM_HOST,
         port: APPIUM_PORT,
@@ -69,8 +68,10 @@ exports.config = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
     'appium:deviceName': process.env.ANDROID_DEVICE_NAME || 'Android Emulator',
-    'appium:udid': AVD_UDID,          // conecta no emulador já iniciado pelo runner
+    'appium:udid': AVD_UDID,
     'appium:autoGrantPermissions': true,
+    'appium:newCommandTimeout': 120,
+    'appium:disableWindowAnimation': true,
     ...appCaps,
     maxInstances: 1,
   }],
