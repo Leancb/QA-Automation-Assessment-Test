@@ -208,30 +208,56 @@ jobs:
           disable-linux-hw-accel: true
           emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
           script: |
-            # Sanity do boot (o runner já espera, mas mantemos)
+            set +e
+            STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
+            echo "1" > "$STATUS_FILE"   # default: falha, até provar o contrário
+
+            # Sanity do boot (runner já espera, mas mantemos)
             adb shell 'for i in $(seq 1 60); do cmd -l | grep -q "settings" && exit 0; sleep 1; done' || true
 
-            # Instala deps
+            # Deps
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
 
             # Appium 2: garantir driver UiAutomator2
-            npx --yes appium@latest driver install uiautomator2
+            npx --yes appium@latest driver install uiautomator2 || echo "[WARN] appium driver install retornou código $?"
 
             # Limpa relatórios se existir script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
 
-            # Executa WDIO e captura status sem parar o step
-            TEST_STATUS=0
+            # ===== Execução de testes (com fallbacks) =====
+            TEST_STATUS=1
             if [ -f mobile-tests/package.json ]; then
-              npm --prefix mobile-tests run test:all || \
-              npm --prefix mobile-tests run test:e2e || \
-              npm --prefix mobile-tests test || TEST_STATUS=$?
+              # 1) scripts npm comuns
+              npm --prefix mobile-tests run test:all && TEST_STATUS=0 || TEST_STATUS=$?
+              if [ "$TEST_STATUS" -ne 0 ]; then
+                npm --prefix mobile-tests run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?
+              fi
+              if [ "$TEST_STATUS" -ne 0 ]; then
+                npm --prefix mobile-tests test && TEST_STATUS=0 || TEST_STATUS=$?
+              fi
+              # 2) fallback: roda WDIO direto
+              if [ "$TEST_STATUS" -ne 0 ]; then
+                npx --yes wdio run mobile-tests/wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?
+              fi
             else
-              npm run test:all || npm run test:e2e || npm test || TEST_STATUS=$?
+              # Repo na raiz
+              npm run test:all && TEST_STATUS=0 || TEST_STATUS=$?
+              if [ "$TEST_STATUS" -ne 0 ]; then
+                npm run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?
+              fi
+              if [ "$TEST_STATUS" -ne 0 ]; then
+                npm test && TEST_STATUS=0 || TEST_STATUS=$?
+              fi
+              if [ "$TEST_STATUS" -ne 0 ]; then
+                npx --yes wdio run wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?
+              fi
             fi
-            echo "$TEST_STATUS" > "${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
 
-            # Gera relatório se existir script
+            echo "$TEST_STATUS" > "$STATUS_FILE"
+            echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS"
+            echo "[DEBUG] STATUS_FILE: $(cat "$STATUS_FILE" || echo '<missing>')"
+
+            # Gera relatório se houver script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
 
             # Logs do dispositivo
@@ -249,7 +275,6 @@ jobs:
             touch "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts/_keep.txt"
             ls -la "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts" || true
 
-      # Se o step acima encerrou com erro 224, vamos decidir o status do job pelo arquivo de status
       - name: Check mobile test status
         run: |
           STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
@@ -260,6 +285,7 @@ jobs:
           STATUS=$(cat "$STATUS_FILE" | tr -d '\r\n ')
           echo "WDIO exit code: ${STATUS}"
           test "$STATUS" = "0"
+
 
       - name: Upload mobile artifacts
         if: always()
