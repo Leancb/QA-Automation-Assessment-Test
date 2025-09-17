@@ -34,11 +34,9 @@
     </treeState>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="4c9fd793-7969-4c51-8c97-dca45d205d07" name="Default Changelist" comment="">
+    <list default="true" id="4c9fd793-7969-4c51-8c97-dca45d205d07" name="Default Changelist" comment="- Correção para funcionar o mobile sem erros na pipeline.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mobile-tests/test/pageobjects/forms.po.js" beforeDir="false" afterPath="$PROJECT_DIR$/mobile-tests/test/pageobjects/forms.po.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mobile-tests/test/specs/forms.e2e.js" beforeDir="false" afterPath="$PROJECT_DIR$/mobile-tests/test/specs/forms.e2e.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/mobile-tests/wdio.conf.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/mobile-tests/wdio.conf.js" beforeDir="false" afterPath="$PROJECT_DIR$/mobile-tests/wdio.conf.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -69,6 +67,7 @@
             <value>
               <list>
                 <branch-info repo="$PROJECT_DIR$" source="ProjQa" />
+                <branch-info repo="$PROJECT_DIR$" source="cod_1509" />
               </list>
             </value>
           </entry>
@@ -83,7 +82,7 @@
     </option>
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
-        <entry key="$PROJECT_DIR$" value="ProjQa" />
+        <entry key="$PROJECT_DIR$" value="main" />
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -182,13 +181,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1755024855277</updated>
-    </task>
-    <task id="LOCAL-00013" summary="Subindo o K6">
-      <created>1755305911732</created>
-      <option name="number" value="00013" />
-      <option name="presentableId" value="LOCAL-00013" />
-      <option name="project" value="LOCAL" />
-      <updated>1755305911732</updated>
     </task>
     <task id="LOCAL-00014" summary="Subindo o K6">
       <created>1755306191803</created>
@@ -526,8 +518,18 @@
       <option name="project" value="LOCAL" />
       <updated>1756157811290</updated>
     </task>
-    <option name="localTasksCounter" value="62" />
+    <task id="LOCAL-00062" summary="- Correção para funcionar o mobile sem erros na pipeline.">
+      <created>1758072284406</created>
+      <option name="number" value="00062" />
+      <option name="presentableId" value="LOCAL-00062" />
+      <option name="project" value="LOCAL" />
+      <updated>1758072284407</updated>
+    </task>
+    <option name="localTasksCounter" value="63" />
     <servers />
+  </component>
+  <component name="UnknownFeatures">
+    <option featureType="com.intellij.fileTypeFactory" implementationName="*.ts" />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">
@@ -540,7 +542,7 @@
                   <entry key="branch">
                     <value>
                       <list>
-                        <option value="ProjQa" />
+                        <option value="master" />
                       </list>
                     </value>
                   </entry>
@@ -588,6 +590,7 @@
     <MESSAGE value="- Atualizando projeto e2e-test e ci.yml" />
     <MESSAGE value="- Atualizando Readme.md geral e de projetos." />
     <MESSAGE value="- Atualizando ci.yml para gerar relatório Api com nomenclatura correta." />
-    <option name="LAST_COMMIT_MESSAGE" value="- Atualizando ci.yml para gerar relatório Api com nomenclatura correta." />
+    <MESSAGE value="- Correção para funcionar o mobile sem erros na pipeline." />
+    <option name="LAST_COMMIT_MESSAGE" value="- Correção para funcionar o mobile sem erros na pipeline." />
   </component>
 </project>
