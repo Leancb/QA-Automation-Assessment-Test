@@ -181,13 +181,6 @@
       <option name="presentableId" value="Default" />
       <updated>1755024855277</updated>
     </task>
-    <task id="LOCAL-00027" summary="Mobile corrigindo esteira">
-      <created>1755317335919</created>
-      <option name="number" value="00027" />
-      <option name="presentableId" value="LOCAL-00027" />
-      <option name="project" value="LOCAL" />
-      <updated>1755317335919</updated>
-    </task>
     <task id="LOCAL-00028" summary="Mobile corrigindo esteira">
       <created>1755322536991</created>
       <option name="number" value="00028" />
@@ -524,7 +517,14 @@
       <option name="project" value="LOCAL" />
       <updated>1758142364680</updated>
     </task>
-    <option name="localTasksCounter" value="76" />
+    <task id="LOCAL-00076" summary="- Correção para funcionar o mobile sem erros na pipeline.">
+      <created>1758144586149</created>
+      <option name="number" value="00076" />
+      <option name="presentableId" value="LOCAL-00076" />
+      <option name="project" value="LOCAL" />
+      <updated>1758144586149</updated>
+    </task>
+    <option name="localTasksCounter" value="77" />
     <servers />
   </component>
   <component name="UnknownFeatures">
