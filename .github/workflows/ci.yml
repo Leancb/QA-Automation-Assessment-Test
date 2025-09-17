@@ -169,7 +169,10 @@ jobs:
       ADB_INSTALL_TIMEOUT: '20'
       ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
       ANDROID_UDID: emulator-5554
-      # Deixe o wdio.conf.js definir protocol/hostname/port/path (não setar APPIUM_* aqui)
+      # Se quiser apontar o app no CI, use **uma** das opções:
+      # ANDROID_APP_APK: mobile-tests/apps/app-debug.apk
+      # ANDROID_APP_PACKAGE: com.seu.app
+      # ANDROID_APP_ACTIVITY: .MainActivity
 
     steps:
       - name: Checkout
@@ -190,11 +193,10 @@ jobs:
             package-lock.json
             mobile-tests/package-lock.json
 
-      # Garante que o arquivo de status exista mesmo se o runner falhar antes do script
+      # Garante arquivo de status para o passo seguinte
       - name: Init mobile test status
         run: echo "1" > _mobile_test_status.txt
 
-      # Sobe o emulador e executa os testes dentro do runner
       - name: Run mobile tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         continue-on-error: true
@@ -211,39 +213,32 @@ jobs:
           disable-linux-hw-accel: true
           emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
           script: |
-            # Não deixe o step morrer no primeiro erro; capture status manualmente
             set +e
             set -o pipefail
 
             STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
             TEST_STATUS=1
-            # Sempre gravar o status ao sair do script
             trap 'echo "$TEST_STATUS" > "$STATUS_FILE"; echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS";' EXIT
 
-            echo "[DEBUG] Boot sanity..."
-            adb shell 'for i in $(seq 1 60); do cmd -l | grep -q "settings" && exit 0; sleep 1; done' || true
+            echo "[DEBUG] adb devices:"
+            adb devices || true
 
-            echo "[DEBUG] npm ci..."
+            # CI deps
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
 
-            echo "[DEBUG] Install Appium UiAutomator2 driver..."
-            npx --yes appium@latest driver install uiautomator2 || echo "[WARN] appium driver install returned $?"
+            # Appium 2: instala driver UiAutomator2 (binário do appium será chamado via 'npx' pelo WDIO service)
+            npx --yes appium@latest --version || true
+            npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install returned $?"
 
-            echo "[DEBUG] Clean reports (if any)..."
+            # Limpa relatórios (se existirem scripts)
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
 
-            echo "[DEBUG] Run tests..."
+            # Executa testes (com fallbacks + execução direta do WDIO)
             if [ -f mobile-tests/package.json ]; then
               npm --prefix mobile-tests run test:all && TEST_STATUS=0 || TEST_STATUS=$?
-              if [ "$TEST_STATUS" -ne 0 ]; then
-                npm --prefix mobile-tests run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?
-              fi
-              if [ "$TEST_STATUS" -ne 0 ]; then
-                npm --prefix mobile-tests test && TEST_STATUS=0 || TEST_STATUS=$?
-              fi
-              if [ "$TEST_STATUS" -ne 0 ]; then
-                npx --yes wdio run mobile-tests/wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?
-              fi
+              if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
+              if [ "$TEST_STATUS" -ne 0 ]; then npm --prefix mobile-tests test && TEST_STATUS=0 || TEST_STATUS=$?; fi
+              if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run mobile-tests/wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
             else
               npm run test:all && TEST_STATUS=0 || TEST_STATUS=$?
               if [ "$TEST_STATUS" -ne 0 ]; then npm run test:e2e && TEST_STATUS=0 || TEST_STATUS=$?; fi
@@ -251,26 +246,23 @@ jobs:
               if [ "$TEST_STATUS" -ne 0 ]; then npx --yes wdio run wdio.conf.js && TEST_STATUS=0 || TEST_STATUS=$?; fi
             fi
 
-            echo "[DEBUG] Generate reports (if any)..."
+            # Relatórios (se houver scripts)
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
 
-            echo "[DEBUG] Grab logs..."
+            # Logs do dispositivo
             adb logcat -d > logcat.txt || true
             adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
 
-            echo "[DEBUG] Collect artifacts..."
+            # Coleta artefatos (inclui logs do WDIO e do Appium se configurados)
             OUT_DIR="${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
             mkdir -p "$OUT_DIR"
-            [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "$OUT_DIR"/ || true
-            [ -d "artifacts" ] && cp -R "artifacts" "$OUT_DIR"/ || true
-            for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do
-              [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "$OUT_DIR"/ || true
-              [ -e "$p" ] && cp -R "$p" "$OUT_DIR"/ || true
+            for d in artifacts logs allure-results allure-report reports screenshots logcat.txt logcat_app.txt; do
+              [ -e "mobile-tests/$d" ] && cp -R "mobile-tests/$d" "$OUT_DIR"/ || true
+              [ -e "$d" ] && cp -R "$d" "$OUT_DIR"/ || true
             done
             touch "$OUT_DIR/_keep.txt"
             ls -la "$OUT_DIR" || true
 
-      # Decide o sucesso do job com base no status dos testes
       - name: Check mobile test status
         run: |
           STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"

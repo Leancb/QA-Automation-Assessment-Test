@@ -1,51 +1,67 @@
-// wdio.conf.js
-/**
- * WDIO config — mobile-tests (CI-safe)
- */
+.conf.js
 const path = require('path');
 const fs = require('fs');
 
 const ARTIFACTS_DIR = path.resolve(__dirname, 'artifacts');
 if (!fs.existsSync(ARTIFACTS_DIR)) fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
-// ---- Appium/Server defaults (evita "Invalid URL" quando env vem vazia) ----
+// Defaults seguros p/ Appium URL
 const APPIUM_HOST = (process.env.APPIUM_HOST || '127.0.0.1').trim();
 const APPIUM_PORT = Number(process.env.APPIUM_PORT || 4723);
 const rawBase = (process.env.APPIUM_BASE_PATH || '/').trim();
 const APPIUM_BASE_PATH = rawBase.startsWith('/') ? rawBase : `/${rawBase}`;
 
-const AVD_NAME = process.env.AVD_NAME || 'Pixel_5_API_30';
+const AVD_UDID = process.env.ANDROID_UDID || 'emulator-5554';
+
+// ---- App under test por ENV ----
+const ANDROID_APP_APK = process.env.ANDROID_APP_APK; // ex: mobile-tests/apps/app-debug.apk
+const ANDROID_APP_PACKAGE = process.env.ANDROID_APP_PACKAGE; // ex: com.wdiodemoapp
+const ANDROID_APP_ACTIVITY = process.env.ANDROID_APP_ACTIVITY; // ex: .MainActivity
+
+// Monta caps do app (APK OU package/activity)
+const appCaps = {};
+if (ANDROID_APP_APK) {
+  appCaps['appium:app'] = path.resolve(__dirname, ANDROID_APP_APK);
+} else if (ANDROID_APP_PACKAGE && ANDROID_APP_ACTIVITY) {
+  appCaps['appium:appPackage'] = ANDROID_APP_PACKAGE;
+  appCaps['appium:appActivity'] = ANDROID_APP_ACTIVITY;
+  appCaps['appium:appWaitActivity'] = '*';
+}
 
 exports.config = {
   runner: 'local',
   specs: ['./test/specs/**/*.e2e.js'],
   maxInstances: 1,
 
-  // URL explícita do servidor (alinha com o serviço do Appium abaixo)
   protocol: 'http',
   hostname: APPIUM_HOST,
   port: APPIUM_PORT,
-  path: APPIUM_BASE_PATH, // Appium 2: '/'. Se usar '/wd/hub', alinhar o service.
+  path: APPIUM_BASE_PATH, // Appium 2 => '/'
 
-  logLevel: 'info',
+  // Logs do WDIO em arquivo + console
+  logLevel: 'debug',
+  outputDir: path.resolve(__dirname, 'logs', 'wdio'),
 
   framework: 'mocha',
   mochaOpts: { timeout: 120000 },
 
-  reporters: ['spec'],
+  reporters: [
+    'spec',
+    // opcional: Allure
+    // ['allure', { outputDir: path.resolve(__dirname, 'allure-results'), useCucumberStepReporter: false }]
+  ],
 
   services: [
     ['appium', {
-      // O serviço sobe o Appium com os mesmos parâmetros do WDIO
+      // Usa o binário via npx, então não precisa do appium instalado como dep do projeto
+      command: 'npx appium',
+      logPath: path.resolve(__dirname, 'logs'), // appium.log ficará aqui
       args: {
         address: APPIUM_HOST,
         port: APPIUM_PORT,
-        // Para Appium 2 o padrão é '/', deixe assim.
-        // Se quiser usar /wd/hub, troque AQUI e também config.path acima.
         'base-path': APPIUM_BASE_PATH,
-        relaxedSecurity: true,
-        // opcionalmente: allowCors: true
-      },
+        relaxedSecurity: true
+      }
     }]
   ],
 
@@ -53,20 +69,19 @@ exports.config = {
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
     'appium:deviceName': process.env.ANDROID_DEVICE_NAME || 'Android Emulator',
-    // use o emulador que o runner já iniciou
-    'appium:udid': process.env.ANDROID_UDID || 'emulator-5554',
+    'appium:udid': AVD_UDID,          // conecta no emulador já iniciado pelo runner
     'appium:autoGrantPermissions': true,
-    'appium:appWaitActivity': '*',
+    ...appCaps,
     maxInstances: 1,
   }],
-  /**
-   * Hooks
-   */
+
   before: async function () {
     const url = `http://${APPIUM_HOST}:${APPIUM_PORT}${APPIUM_BASE_PATH}`;
-    try { new URL(url); }
-    catch (e) { throw new Error(`Appium URL inválida no CI: ${url}`); }
+    try { new URL(url); } catch (e) { throw new Error(`Appium URL inválida: ${url}`); }
     console.log('[WDIO] Appium URL:', url);
+    console.log('[WDIO] Using UDID:', AVD_UDID);
+    if (ANDROID_APP_APK) console.log('[WDIO] APK:', path.resolve(__dirname, ANDROID_APP_APK));
+    if (ANDROID_APP_PACKAGE) console.log('[WDIO] appPackage:', ANDROID_APP_PACKAGE, 'appActivity:', ANDROID_APP_ACTIVITY);
   },
 
   afterTest: async function (test, context, { error }) {
