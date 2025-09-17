@@ -1,24 +1,27 @@
-.conf.js
+// wdio.conf.js
 const path = require('path');
 const fs = require('fs');
 
 const ARTIFACTS_DIR = path.resolve(__dirname, 'artifacts');
 if (!fs.existsSync(ARTIFACTS_DIR)) fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 
-// Defaults seguros p/ Appium URL
+// Safe defaults for Appium URL
 const APPIUM_HOST = (process.env.APPIUM_HOST || '127.0.0.1').trim();
 const APPIUM_PORT = Number(process.env.APPIUM_PORT || 4723);
 const rawBase = (process.env.APPIUM_BASE_PATH || '/').trim();
 const APPIUM_BASE_PATH = rawBase.startsWith('/') ? rawBase : `/${rawBase}`;
 
+// Use external Appium server in CI (started by workflow script)
+const USE_EXTERNAL_APPIUM = process.env.CI === 'true' || process.env.WDIO_EXTERNAL_APPIUM === '1';
+
 const AVD_UDID = process.env.ANDROID_UDID || 'emulator-5554';
 
-// ---- App under test por ENV ----
-const ANDROID_APP_APK = process.env.ANDROID_APP_APK; // ex: mobile-tests/apps/app-debug.apk
-const ANDROID_APP_PACKAGE = process.env.ANDROID_APP_PACKAGE; // ex: com.wdiodemoapp
-const ANDROID_APP_ACTIVITY = process.env.ANDROID_APP_ACTIVITY; // ex: .MainActivity
+// ---- App under test via ENV ----
+const ANDROID_APP_APK = process.env.ANDROID_APP_APK;         // e.g., mobile-tests/apps/app-debug.apk
+const ANDROID_APP_PACKAGE = process.env.ANDROID_APP_PACKAGE; // e.g., com.wdiodemoapp
+const ANDROID_APP_ACTIVITY = process.env.ANDROID_APP_ACTIVITY; // e.g., .MainActivity
 
-// Monta caps do app (APK OU package/activity)
+// Build app caps (APK OR package/activity)
 const appCaps = {};
 if (ANDROID_APP_APK) {
   appCaps['appium:app'] = path.resolve(__dirname, ANDROID_APP_APK);
@@ -38,37 +41,45 @@ exports.config = {
   port: APPIUM_PORT,
   path: APPIUM_BASE_PATH, // Appium 2 => '/'
 
-  // Logs do WDIO em arquivo + console
+  // WDIO logs to file + console
   logLevel: 'debug',
   outputDir: path.resolve(__dirname, 'logs', 'wdio'),
+
+  connectionRetryTimeout: 180000,
+  connectionRetryCount: 3,
 
   framework: 'mocha',
   mochaOpts: { timeout: 120000 },
 
   reporters: [
     'spec',
-    // opcional: Allure
+    // Optional: Allure
     // ['allure', { outputDir: path.resolve(__dirname, 'allure-results'), useCucumberStepReporter: false }]
   ],
 
-  services: [
-    ['appium', {
-      command: 'appium',                     // <- aqui
-      logPath: path.resolve(__dirname, 'logs'),
-      args: {
-        address: APPIUM_HOST,
-        port: APPIUM_PORT,
-        'base-path': APPIUM_BASE_PATH,
-        relaxedSecurity: true
-      }
-    }]
-  ],
+  // Local dev: use Appium service.
+  // CI: disable service (external server is started by the workflow).
+  services: USE_EXTERNAL_APPIUM
+    ? []
+    : [
+        ['appium', {
+          // For local dev you need: npm i -D appium
+          command: 'appium',
+          logPath: path.resolve(__dirname, 'logs'),
+          args: {
+            address: APPIUM_HOST,
+            port: APPIUM_PORT,
+            'base-path': APPIUM_BASE_PATH,
+            relaxedSecurity: true
+          }
+        }]
+      ],
 
   capabilities: [{
     platformName: 'Android',
     'appium:automationName': 'UiAutomator2',
     'appium:deviceName': process.env.ANDROID_DEVICE_NAME || 'Android Emulator',
-    'appium:udid': AVD_UDID,
+    'appium:udid': AVD_UDID, // connects to emulator started by the runner
     'appium:autoGrantPermissions': true,
     'appium:newCommandTimeout': 120,
     'appium:disableWindowAnimation': true,
@@ -81,6 +92,7 @@ exports.config = {
     try { new URL(url); } catch (e) { throw new Error(`Appium URL inválida: ${url}`); }
     console.log('[WDIO] Appium URL:', url);
     console.log('[WDIO] Using UDID:', AVD_UDID);
+    console.log('[WDIO] USE_EXTERNAL_APPIUM:', USE_EXTERNAL_APPIUM);
     if (ANDROID_APP_APK) console.log('[WDIO] APK:', path.resolve(__dirname, ANDROID_APP_APK));
     if (ANDROID_APP_PACKAGE) console.log('[WDIO] appPackage:', ANDROID_APP_PACKAGE, 'appActivity:', ANDROID_APP_ACTIVITY);
   },
