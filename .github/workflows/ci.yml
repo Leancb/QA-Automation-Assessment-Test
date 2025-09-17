@@ -168,10 +168,8 @@ jobs:
       CI: true
       ADB_INSTALL_TIMEOUT: '20'
       ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
-      # Emulador padrão do runner
       ANDROID_UDID: emulator-5554
-      # NÃO defina APPIUM_HOST/PORT/APPIUM_BASE_PATH aqui.
-      # Deixe o wdio.conf.js aplicar os defaults seguros.
+      # Não defina APPIUM_* aqui; deixe o wdio.conf.js aplicar defaults.
 
     steps:
       - name: Checkout
@@ -192,63 +190,76 @@ jobs:
             package-lock.json
             mobile-tests/package-lock.json
 
-      # Sobe o emulador Android já pronto para uso
+      # Sobe emulador e executa testes dentro do próprio step
+      # Marcamos continue-on-error para ignorar o flake do "adb emu kill (224)".
       - name: Run mobile tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
+        continue-on-error: true
         with:
           api-level: 30
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 576M
+          disk-size: 8G
+          emulator-boot-timeout: 1200
+          disable-linux-hw-accel: true
           emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
           script: |
-            # sanity check do boot (runner já aguarda, mas mantemos)
+            # Sanity do boot (o runner já espera, mas mantemos)
             adb shell 'for i in $(seq 1 60); do cmd -l | grep -q "settings" && exit 0; sleep 1; done' || true
 
-            # deps do projeto
+            # Instala deps
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
 
-            # Appium 2: garantir driver UiAutomator2 instalado no ambiente do job
+            # Appium 2: garantir driver UiAutomator2
             npx --yes appium@latest driver install uiautomator2
 
-            # limpar relatórios anteriores (se scripts existirem)
+            # Limpa relatórios se existir script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
 
-            # rodar testes (tenta as variações comuns)
-            if [ -f mobile-tests/package.json ]; then \
+            # Executa WDIO e captura status sem parar o step
+            TEST_STATUS=0
+            if [ -f mobile-tests/package.json ]; then
               npm --prefix mobile-tests run test:all || \
               npm --prefix mobile-tests run test:e2e || \
-              npm --prefix mobile-tests test ; \
-            else \
-              npm run test:all || npm run test:e2e || npm test ; \
+              npm --prefix mobile-tests test || TEST_STATUS=$?
+            else
+              npm run test:all || npm run test:e2e || npm test || TEST_STATUS=$?
             fi
+            echo "$TEST_STATUS" > "${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
 
-            # gerar relatórios se houver script
+            # Gera relatório se existir script
             if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
 
-            # não abrir Allure no CI
-            if [ -z "$CI" ]; then \
-              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:open || true; else npm run report:open || true; fi; \
-            fi
-
-            # logs (completo + filtrado do app)
+            # Logs do dispositivo
             adb logcat -d > logcat.txt || true
             adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
 
-            # copiar artefatos / relatórios
+            # Copia artefatos (inclui artifacts/ do afterTest do wdio.conf.js)
             mkdir -p "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
-
-            # artifacts próprios do wdio.conf.js (screenshots/pageSource)
             [ -d "mobile-tests/artifacts" ] && cp -R "mobile-tests/artifacts" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true
             [ -d "artifacts" ] && cp -R "artifacts" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true
-
             for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do
               [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true
               [ -e "$p" ] && cp -R "$p" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true
             done
-
             touch "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts/_keep.txt"
             ls -la "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts" || true
+
+      # Se o step acima encerrou com erro 224, vamos decidir o status do job pelo arquivo de status
+      - name: Check mobile test status
+        run: |
+          STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
+          if [ ! -f "$STATUS_FILE" ]; then
+            echo "Arquivo de status não encontrado — presumindo falha."
+            exit 1
+          fi
+          STATUS=$(cat "$STATUS_FILE" | tr -d '\r\n ')
+          echo "WDIO exit code: ${STATUS}"
+          test "$STATUS" = "0"
 
       - name: Upload mobile artifacts
         if: always()
