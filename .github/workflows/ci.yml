@@ -307,4 +307,3 @@ jobs:
             k6-load-tests/summary.txt
             k6-load-tests/analysis.md
           retention-days: 7
-
