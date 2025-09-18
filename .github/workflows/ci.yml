@@ -201,7 +201,7 @@ jobs:
           echo "$SDKROOT/emulator" >> "$GITHUB_PATH"
           echo "$SDKROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
-          # Aceita licenças e instala o que precisamos (com retry por causa de intermitência da rede)
+          # Licenças + downloads com retry
           for attempt in 1 2 3; do
             echo "== sdkmanager attempt $attempt =="
             yes | "$TOOLS/sdkmanager" --licenses || true
@@ -215,6 +215,27 @@ jobs:
           # Cria o AVD
           echo "no" | "$TOOLS/avdmanager" create avd -n ci_avd_api33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6 --force
 
+          # Deixa o AVD mais "leve" e estável em VM sem aceleração
+          AVD_DIR="$HOME/.android/avd/ci_avd_api33.avd"
+          {
+            echo "hw.gpu.enabled=yes"
+            echo "hw.gpu.mode=swiftshader_indirect"
+            echo "hw.keyboard=yes"
+            echo "hw.ramSize=2048"
+            echo "disk.dataPartition.size=4096M"
+            echo "hw.camera.back=none"
+            echo "hw.camera.front=none"
+            echo "hw.audioInput=no"
+            echo "hw.sensors.orientation=no"
+            echo "hw.sensors.proximity=no"
+            echo "hw.sensors.gyroscope=no"
+            echo "hw.sensors.accelerometer=no"
+            echo "hw.sensors.compass=no"
+            echo "playstore.enabled=false"
+            echo "shell.vmheap=384"
+          } >> "$AVD_DIR/config.ini"
+          echo "[OK] AVD configurado em $AVD_DIR"
+
       - name: Start emulator (headless) and wait boot
         shell: bash
         run: |
@@ -223,39 +244,98 @@ jobs:
           LOG_DIR="${GITHUB_WORKSPACE:-$(pwd)}/logs"
           mkdir -p "$LOG_DIR"
 
+          start_emulator() {
+            echo "[INFO] Iniciando emulador..."
+            nohup emulator -avd ci_avd_api33 -port 5554 \
+              -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
+              -no-snapshot -wipe-data -no-accel \
+              -idle-grpc-timeout 300 \
+              > "$LOG_DIR/emulator.log" 2>&1 &
+
+            EMU_PID=$!
+            echo "$EMU_PID" > "$LOG_DIR/emulator.pid"
+            echo "[INFO] emulator PID=$EMU_PID"
+          }
+
+          kill_emulator() {
+            echo "[INFO] Encerrando emulador..."
+            if [ -f "$LOG_DIR/emulator.pid" ]; then
+              kill "$(cat "$LOG_DIR/emulator.pid")" 2>/dev/null || true
+            fi
+            adb -s emulator-5554 emu kill 2>/dev/null || true
+            pkill -f "emulator.*-avd ci_avd_api33" 2>/dev/null || true
+            sleep 3
+          }
+
           adb kill-server || true
           adb start-server || true
 
-          # Sobe o emulador headless na porta 5554 p/ casar com o ANDROID_UDID
-          nohup emulator -avd ci_avd_api33 -port 5554 \
-            -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
-            -no-snapshot -wipe-data -no-accel \
-            -idle-grpc-timeout 300 \
-            > "$LOG_DIR/emulator.log" 2>&1 &
+          # 1ª tentativa
+          start_emulator
 
-          # Aguarda o device aparecer e curar "offline"
-          echo "[WAIT] adb wait-for-device"
-          adb -s emulator-5554 wait-for-device
+          # Espera o device aparecer no "adb devices" (sem bloquear infinito)
+          appeared=0
+          for i in {1..300}; do  # ~10 minutos
+            if adb devices | awk '$1 ~ /emulator-5554/ {print $2}' | grep -qE 'device|offline'; then
+              appeared=1
+              break
+            fi
+            if ! ps -p "$(cat "$LOG_DIR/emulator.pid" 2>/dev/null || echo 0)" >/dev/null 2>&1; then
+              echo "[ERROR] Processo do emulador morreu. Tentando restart..."
+              break
+            fi
+            sleep 2
+          done
 
-          for i in {1..60}; do
-            STATE=$(adb -s emulator-5554 get-state 2>/dev/null | tr -d '\r\n')
-            if [ "$STATE" = "device" ]; then break; fi
-            echo "[WARN] state=$STATE; adb reconnect ($i/60)"
+          # Se não apareceu, reinicia uma vez
+          if [ "$appeared" -ne 1 ]; then
+            echo "[WARN] Emulador não registrou no ADB. Reiniciando..."
+            kill_emulator
+            adb kill-server || true
+            adb start-server || true
+            start_emulator
+            appeared=0
+            for i in {1..300}; do
+              if adb devices | awk '$1 ~ /emulator-5554/ {print $2}' | grep -qE 'device|offline'; then
+                appeared=1
+                break
+              fi
+              sleep 2
+            done
+            if [ "$appeared" -ne 1 ]; then
+              echo "[ERROR] Emulador não apareceu no ADB após retry."
+              tail -n 200 "$LOG_DIR/emulator.log" || true
+              exit 1
+            fi
+          fi
+
+          # Cura "offline" -> até virar "device"
+          for i in {1..120}; do
+            state=$(adb -s emulator-5554 get-state 2>/dev/null | tr -d '\r\n')
+            [ "$state" = "device" ] && break
+            echo "[WARN] state=$state; adb reconnect ($i/120)"
             adb -s emulator-5554 reconnect offline >/dev/null 2>&1 || true
             sleep 2
           done
 
-          # Espera sys.boot_completed e dev.bootcomplete
+          # Espera sys.boot_completed e dev.bootcomplete com timeout
           for i in {1..240}; do
             SB=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
             DB=$(adb -s emulator-5554 shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
             [ "$SB" = "1" ] && [ "$DB" = "1" ] && break
+            # se o processo morreu no meio, aborta cedo
+            if ! ps -p "$(cat "$LOG_DIR/emulator.pid" 2>/dev/null || echo 0)" >/dev/null 2>&1; then
+              echo "[ERROR] Emulador morreu durante boot."
+              tail -n 200 "$LOG_DIR/emulator.log" || true
+              exit 1
+            fi
             sleep 2
           done
           SB=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
           DB=$(adb -s emulator-5554 shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
           if [ "$SB" != "1" ] || [ "$DB" != "1" ]; then
             echo "[ERROR] Boot não estabilizou: sys.boot_completed=$SB dev.bootcomplete=$DB"
+            tail -n 200 "$LOG_DIR/emulator.log" || true
             exit 1
           fi
 
@@ -271,6 +351,7 @@ jobs:
 
           echo "[OK] Emulador pronto"
           adb devices
+
 
       - name: Run Appium + WDIO tests (capture status & artifacts)
         shell: bash
