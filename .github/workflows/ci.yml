@@ -156,345 +156,88 @@ jobs:
 
 
 
-  # =======================
-  # MOBILE TESTS (APPIUM + ANDROID EMULATOR) — MANUAL AVD
-  # =======================
-  mobile_tests:
-    name: Mobile CI (Android)
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # =======================
+    # MOBILE TESTS (APPIUM + ANDROID EMULATOR)
+    # =======================
+    mobile_tests:
+      name: Mobile CI (Android)
+      runs-on: ubuntu-latest
+      timeout-minutes: 45
+      env:
+        CI: true
+        ADB_INSTALL_TIMEOUT: '20'
+        ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL: '20'
 
-    env:
-      CI: true
-      ANDROID_UDID: emulator-5554
-      ADB_INSTALL_TIMEOUT: '30'
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        - name: Setup Java 17
+          uses: actions/setup-java@v4
+          with:
+            distribution: temurin
+            java-version: '17'
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+        - name: Setup Node 20
+          uses: actions/setup-node@v4
+          with:
+            node-version: '20'
+            cache: npm
+            # Se o package.json estiver em mobile-tests, isso ajuda o cache:
+            cache-dependency-path: |
+              package-lock.json
+              mobile-tests/package-lock.json
 
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            mobile-tests/package-lock.json
+        - name: Run mobile tests on Android emulator
+          uses: reactivecircus/android-emulator-runner@v2
+          with:
+            api-level: 30
+            target: default
+            arch: x86_64
+            profile: pixel_6
+            emulator-options: -no-snapshot -no-audio -no-window -no-boot-anim -gpu swiftshader_indirect
+            script: |
+              adb shell 'for i in $(seq 1 60); do cmd -l | grep -q "settings" && exit 0; sleep 1; done' || true
 
-      - name: Init mobile test status file
-        run: echo "1" > _mobile_test_status.txt
+              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
+              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
+              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run test:all || npm --prefix mobile-tests run test:e2e || npm --prefix mobile-tests test; else npm run test:all || npm run test:e2e || npm test; fi
+              if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
 
-      - name: Install Android SDK components & create AVD (API 33)
-        shell: bash
-        run: |
-          set -euo pipefail
-          SDKROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
-          TOOLS="$SDKROOT/cmdline-tools/latest/bin"
-          echo "$SDKROOT/platform-tools" >> "$GITHUB_PATH"
-          echo "$SDKROOT/emulator" >> "$GITHUB_PATH"
-          echo "$SDKROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+              # não abra o Allure no CI
+              if [ -z "$CI" ]; then if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:open || true; else npm run report:open || true; fi; fi
 
-          # Licenças + downloads com retry
-          for attempt in 1 2 3; do
-            echo "== sdkmanager attempt $attempt =="
-            yes | "$TOOLS/sdkmanager" --licenses || true
-            "$TOOLS/sdkmanager" \
-              "platform-tools" \
-              "platforms;android-33" \
-              "emulator" \
-              "system-images;android-33;google_apis;x86_64" && break || sleep 5
-          done
+              # logs (completo + filtrado do app)
+              adb logcat -d > logcat.txt || true
+              adb logcat -d '*:S' ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > logcat_app.txt || true
 
-          # Cria o AVD
-          echo "no" | "$TOOLS/avdmanager" create avd -n ci_avd_api33 -k "system-images;android-33;google_apis;x86_64" -d pixel_6 --force
-
-          # Deixa o AVD mais "leve" e estável em VM sem aceleração
-          AVD_DIR="$HOME/.android/avd/ci_avd_api33.avd"
-          {
-            echo "hw.gpu.enabled=yes"
-            echo "hw.gpu.mode=swiftshader_indirect"
-            echo "hw.keyboard=yes"
-            echo "hw.ramSize=2048"
-            echo "disk.dataPartition.size=4096M"
-            echo "hw.camera.back=none"
-            echo "hw.camera.front=none"
-            echo "hw.audioInput=no"
-            echo "hw.sensors.orientation=no"
-            echo "hw.sensors.proximity=no"
-            echo "hw.sensors.gyroscope=no"
-            echo "hw.sensors.accelerometer=no"
-            echo "hw.sensors.compass=no"
-            echo "playstore.enabled=false"
-            echo "shell.vmheap=384"
-          } >> "$AVD_DIR/config.ini"
-          echo "[OK] AVD configurado em $AVD_DIR"
-
-      - name: Start emulator (headless) and wait boot
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          LOG_DIR="${GITHUB_WORKSPACE:-$(pwd)}/logs"
-          mkdir -p "$LOG_DIR"
-
-          start_emulator() {
-            echo "[INFO] Iniciando emulador..."
-            nohup emulator -avd ci_avd_api33 -port 5554 \
-              -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
-              -no-snapshot -wipe-data -no-accel \
-              -idle-grpc-timeout 300 \
-              > "$LOG_DIR/emulator.log" 2>&1 &
-
-            EMU_PID=$!
-            echo "$EMU_PID" > "$LOG_DIR/emulator.pid"
-            echo "[INFO] emulator PID=$EMU_PID"
-          }
-
-          kill_emulator() {
-            echo "[INFO] Encerrando emulador..."
-            if [ -f "$LOG_DIR/emulator.pid" ]; then
-              kill "$(cat "$LOG_DIR/emulator.pid")" 2>/dev/null || true
-            fi
-            adb -s emulator-5554 emu kill 2>/dev/null || true
-            pkill -f "emulator.*-avd ci_avd_api33" 2>/dev/null || true
-            sleep 3
-          }
-
-          adb kill-server || true
-          adb start-server || true
-
-          # 1ª tentativa
-          start_emulator
-
-          # Espera o device aparecer no "adb devices" (sem bloquear infinito)
-          appeared=0
-          for i in {1..300}; do  # ~10 minutos
-            if adb devices | awk '$1 ~ /emulator-5554/ {print $2}' | grep -qE 'device|offline'; then
-              appeared=1
-              break
-            fi
-            if ! ps -p "$(cat "$LOG_DIR/emulator.pid" 2>/dev/null || echo 0)" >/dev/null 2>&1; then
-              echo "[ERROR] Processo do emulador morreu. Tentando restart..."
-              break
-            fi
-            sleep 2
-          done
-
-          # Se não apareceu, reinicia uma vez
-          if [ "$appeared" -ne 1 ]; then
-            echo "[WARN] Emulador não registrou no ADB. Reiniciando..."
-            kill_emulator
-            adb kill-server || true
-            adb start-server || true
-            start_emulator
-            appeared=0
-            for i in {1..300}; do
-              if adb devices | awk '$1 ~ /emulator-5554/ {print $2}' | grep -qE 'device|offline'; then
-                appeared=1
-                break
-              fi
-              sleep 2
-            done
-            if [ "$appeared" -ne 1 ]; then
-              echo "[ERROR] Emulador não apareceu no ADB após retry."
-              tail -n 200 "$LOG_DIR/emulator.log" || true
-              exit 1
-            fi
-          fi
-
-          # Cura "offline" -> até virar "device"
-          for i in {1..120}; do
-            state=$(adb -s emulator-5554 get-state 2>/dev/null | tr -d '\r\n')
-            [ "$state" = "device" ] && break
-            echo "[WARN] state=$state; adb reconnect ($i/120)"
-            adb -s emulator-5554 reconnect offline >/dev/null 2>&1 || true
-            sleep 2
-          done
-
-          # Espera sys.boot_completed e dev.bootcomplete com timeout
-          for i in {1..240}; do
-            SB=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
-            DB=$(adb -s emulator-5554 shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
-            [ "$SB" = "1" ] && [ "$DB" = "1" ] && break
-            # se o processo morreu no meio, aborta cedo
-            if ! ps -p "$(cat "$LOG_DIR/emulator.pid" 2>/dev/null || echo 0)" >/dev/null 2>&1; then
-              echo "[ERROR] Emulador morreu durante boot."
-              tail -n 200 "$LOG_DIR/emulator.log" || true
-              exit 1
-            fi
-            sleep 2
-          done
-          SB=$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')
-          DB=$(adb -s emulator-5554 shell getprop dev.bootcomplete 2>/dev/null | tr -d '\r\n')
-          if [ "$SB" != "1" ] || [ "$DB" != "1" ]; then
-            echo "[ERROR] Boot não estabilizou: sys.boot_completed=$SB dev.bootcomplete=$DB"
-            tail -n 200 "$LOG_DIR/emulator.log" || true
-            exit 1
-          fi
-
-          # Desbloqueia e desativa animações (com retry)
-          adb -s emulator-5554 shell input keyevent 82 || true
-          for i in {1..6}; do
-            adb -s emulator-5554 shell settings put global window_animation_scale 0 && \
-            adb -s emulator-5554 shell settings put global transition_animation_scale 0 && \
-            adb -s emulator-5554 shell settings put global animator_duration_scale 0 && break
-            echo "[WARN] settings ainda indisponível ($i/6)"
-            sleep 2
-          done
-
-          echo "[OK] Emulador pronto"
-          adb devices
+              # copiar artefatos para o workspace (sem usar variáveis entre linhas)
+              mkdir -p "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
+              for p in allure-results allure-report reports logs screenshots logcat.txt logcat_app.txt; do [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true; [ -e "$p" ] && cp -R "$p" "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"/ || true; done
+              touch "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts/_keep.txt"
+              ls -la "${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts" || true
 
 
-      - name: Run Appium + WDIO tests (capture status & artifacts)
-        shell: bash
-        run: |
-          set -euo pipefail
 
-          STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
-          LOG_DIR="${GITHUB_WORKSPACE:-$(pwd)}/logs"
-          OUT_DIR="${GITHUB_WORKSPACE:-$(pwd)}/ci-mobile-artifacts"
-          mkdir -p "$LOG_DIR" "$OUT_DIR"
+        - name: Upload mobile artifacts
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: mobile-artifacts
+            path: ci-mobile-artifacts/**
+            if-no-files-found: warn
+            retention-days: 7
 
-          TEST_STATUS=1
-          finish() {
-            echo "$TEST_STATUS" > "$STATUS_FILE"
-            echo "[DEBUG] WDIO/Tests exit code: $TEST_STATUS"
-            # coleta logs do emulador
-            echo "[DEBUG] Tail emulator.log"
-            tail -n 200 "$LOG_DIR/emulator.log" 2>/dev/null || true
-            # logcat
-            adb -s emulator-5554 logcat -d > "$OUT_DIR/logcat.txt" 2>/dev/null || true
-            adb -s emulator-5554 logcat -d "*:S" ActivityManager:I AndroidRuntime:E DEBUG:E System.err:E > "$OUT_DIR/logcat_app.txt" 2>/dev/null || true
-            # encerra emulador
-            adb -s emulator-5554 emu kill || true
-          }
-          trap finish EXIT
-
-          echo "[DEBUG] Node versions:"
-          node -e "console.log(process.versions)"
-
-          # Descobre APK se existir
-          if [ -f mobile-tests/apps/app-debug.apk ]; then
-            export ANDROID_APP_APK="mobile-tests/apps/app-debug.apk"
-            echo "[DEBUG] ANDROID_APP_APK=$ANDROID_APP_APK"
-          fi
-
-          # Fallback para garantir sessão
-          if [ -z "${ANDROID_APP_APK:-}" ] && [ -z "${ANDROID_APP_PACKAGE:-}" ] && [ -z "${ANDROID_APP_ACTIVITY:-}" ]; then
-            export ANDROID_APP_PACKAGE="com.android.settings"
-            export ANDROID_APP_ACTIVITY=".Settings"
-            echo "[DEBUG] Fallback => $ANDROID_APP_PACKAGE $ANDROID_APP_ACTIVITY"
-          fi
-
-          # Deps
-          if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests ci; else npm ci; fi
-
-          # Appium 2 + driver UiAutomator2
-          npx --yes appium@latest --version || true
-          npx --yes appium@latest driver install uiautomator2 || echo "[WARN] driver install retornou $?"
-
-          echo "[DEBUG] Start Appium..."
-          npx appium --address 127.0.0.1 --port 4723 --base-path / --relaxed-security > "$LOG_DIR/appium-ci.log" 2>&1 &
-          APPIUM_PID=$!
-
-          # Espera /status
-          for i in {1..60}; do
-            curl -sf "http://127.0.0.1:4723/status" >/dev/null 2>&1 && break
-            sleep 1
-          done
-          if ! curl -sf "http://127.0.0.1:4723/status" >/dev/null 2>&1; then
-            echo "[ERROR] Appium não respondeu em /status"
-            tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
-            exit 1
-          fi
-
-          # Limpa relatórios se existirem scripts
-          if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:clean || true; else npm run report:clean || true; fi
-
-          # ===== Execução com fallbacks (logando saída em arquivo) =====
-          run_wdio() {
-            CMD="$1"
-            echo "[RUN] $CMD"
-            # captura exit code mesmo com pipe
-            set +o pipefail || true
-            bash -lc "$CMD 2>&1 | tee -a \"$LOG_DIR/wdio-run.log\""
-            local code=${PIPESTATUS[0]:-1}
-            set -o pipefail || true
-            return $code
-          }
-
-          if [ -f mobile-tests/package.json ]; then
-            run_wdio "npm --prefix mobile-tests run test:all" && TEST_STATUS=0 || TEST_STATUS=$?
-            if [ "$TEST_STATUS" -ne 0 ]; then run_wdio "npm --prefix mobile-tests run test:e2e" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-            if [ "$TEST_STATUS" -ne 0 ]; then run_wdio "npm --prefix mobile-tests test" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-            if [ "$TEST_STATUS" -ne 0 ] && [ -f mobile-tests/wdio.conf.js ]; then run_wdio "npx --yes wdio run mobile-tests/wdio.conf.js" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-            if [ "$TEST_STATUS" -ne 0 ] && [ -f mobile-tests/wdio.conf.ts ]; then run_wdio "npx --yes wdio run mobile-tests/wdio.conf.ts" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-          else
-            run_wdio "npm run test:all" && TEST_STATUS=0 || TEST_STATUS=$?
-            if [ "$TEST_STATUS" -ne 0 ]; then run_wdio "npm run test:e2e" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-            if [ "$TEST_STATUS" -ne 0 ]; then run_wdio "npm test" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-            if [ "$TEST_STATUS" -ne 0 ] && [ -f wdio.conf.js ]; then run_wdio "npx --yes wdio run wdio.conf.js" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-            if [ "$TEST_STATUS" -ne 0 ] && [ -f wdio.conf.ts ]; then run_wdio "npx --yes wdio run wdio.conf.ts" && TEST_STATUS=0 || TEST_STATUS=$?; fi
-          fi
-
-          echo "[DEBUG] Tail Appium log:"
-          tail -n 200 "$LOG_DIR/appium-ci.log" 2>/dev/null || true
-
-          # Gera relatórios se houver script
-          if [ -f mobile-tests/package.json ]; then npm --prefix mobile-tests run report:gen || true; else npm run report:gen || true; fi
-
-          # Coleta artefatos (garante que sempre existirá algo)
-          [ -f "$LOG_DIR/appium-ci.log" ] && cp "$LOG_DIR/appium-ci.log" "$OUT_DIR/" || true
-          [ -f "$LOG_DIR/wdio-run.log" ] && cp "$LOG_DIR/wdio-run.log" "$OUT_DIR/" || true
-          for p in allure-results allure-report reports logs screenshots; do
-            [ -e "mobile-tests/$p" ] && cp -R "mobile-tests/$p" "$OUT_DIR"/ || true
-            [ -e "$p" ] && cp -R "$p" "$OUT_DIR"/ || true
-          done
-          touch "$OUT_DIR/_keep.txt"
-
-          # Encerra Appium
-          kill $APPIUM_PID 2>/dev/null || true
-
-      - name: Check mobile test status
-        shell: bash
-        run: |
-          STATUS_FILE="${GITHUB_WORKSPACE:-$(pwd)}/_mobile_test_status.txt"
-          if [ ! -f "$STATUS_FILE" ]; then
-            echo "Arquivo de status não encontrado — presumindo falha."
-            exit 1
-          fi
-          STATUS=$(tr -d '\r\n ' < "$STATUS_FILE")
-          echo "WDIO exit code: ${STATUS}"
-          test "$STATUS" = "0"
-
-      - name: Upload mobile artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobile-artifacts
-          path: ci-mobile-artifacts/**
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Upload Allure HTML
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-html
-          path: |
-            mobile-tests/reports/allure/html/**
-            reports/allure/html/**
-          if-no-files-found: ignore
-          retention-days: 7
-
+        - name: Upload Allure HTML
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: allure-html
+            path: |
+              mobile-tests/reports/allure/html/**
+              reports/allure/html/**
+            if-no-files-found: ignore
+            retention-days: 7
 
 
 
